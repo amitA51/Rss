@@ -1,4 +1,4 @@
-import type { FeedItem, Tag, RssFeed } from '../types';
+import type { FeedItem, Tag, RssFeed, PersonalItem, AppData } from '../types';
 
 // --- LocalStorage Persistence ---
 const loadFromStorage = <T>(key: string, defaultValue: T): T => {
@@ -65,13 +65,84 @@ const defaultFeedItems: FeedItem[] = [
   },
 ];
 
+const defaultPersonalItems: PersonalItem[] = [
+    {
+        id: 'p1',
+        type: 'workout',
+        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        title: 'אימון רגליים',
+        content: 'אימון קשה אבל מספק. הרגשתי התקדמות בסקוואט.',
+        exercises: [
+            { id: 'ex1', name: 'סקוואט', sets: [{ reps: 8, weight: 80 }, { reps: 8, weight: 80 }, { reps: 6, weight: 85 }] },
+            { id: 'ex2', name: 'דדליפט רומני', sets: [{ reps: 10, weight: 60 }, { reps: 10, weight: 60 }, { reps: 12, weight: 55 }] },
+            { id: 'ex3', name: 'מכרעים', sets: [{ reps: 12, weight: 20 }, { reps: 12, weight: 20 }] },
+        ],
+        metadata: { duration: 60, feeling: 'great' }
+    },
+    {
+        id: 'p4',
+        type: 'link',
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        title: "Figma: The Collaborative Interface Design Tool.",
+        content: "Figma is a vector graphics editor and prototyping tool which is primarily web-based, with additional offline features enabled by desktop applications for macOS and Windows.",
+        url: 'https://www.figma.com',
+        domain: 'figma.com',
+        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Figma-logo.svg/1667px-Figma-logo.svg.png'
+    },
+    {
+        id: 'p2',
+        type: 'learning',
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        title: 'React Server Components',
+        content: 'הבנתי את ההבדל העיקרי בין קומפוננטות שרת לקליינט. קומפוננטות שרת מרנדרות בשרת בלבד ואין להן state או lifecycle methods.',
+        metadata: {
+            status: 'learning',
+            source: 'https://react.dev/blog',
+            key_takeaways: [
+                "RSCs render ahead of time, on the server.",
+                "They can directly access server-side resources (e.g., databases).",
+                "They produce zero client-side JavaScript bundle size.",
+            ]
+        }
+    },
+    {
+        id: 'p3',
+        type: 'note',
+        createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        title: 'רשימת קניות',
+        content: '[x] חלב\n[x] ביצים\n[ ] לחם\n[ ] אבוקדו',
+    }
+];
+
 
 // --- Exported Live Data ---
 export let mockTags: Tag[] = loadFromStorage('spark_tags', defaultTags);
 export let mockRssFeeds: RssFeed[] = loadFromStorage('spark_rss_feeds', defaultRssFeeds);
 export let mockFeedItems: FeedItem[] = loadFromStorage('spark_feed_items', defaultFeedItems);
+export let mockPersonalItems: PersonalItem[] = loadFromStorage('spark_personal_items', defaultPersonalItems);
 
 // --- Savers ---
 export const saveTags = () => saveToStorage('spark_tags', mockTags);
 export const saveRssFeeds = () => saveToStorage('spark_rss_feeds', mockRssFeeds);
 export const saveFeedItems = () => saveToStorage('spark_feed_items', mockFeedItems);
+export const savePersonalItems = () => saveToStorage('spark_personal_items', mockPersonalItems);
+
+// --- Bulk Data Operations ---
+export const getAllData = (): AppData => ({
+  tags: mockTags,
+  rssFeeds: mockRssFeeds,
+  feedItems: mockFeedItems,
+  personalItems: mockPersonalItems,
+});
+
+export const replaceAllData = (data: AppData): void => {
+  mockTags = data.tags || [];
+  mockRssFeeds = data.rssFeeds || [];
+  mockFeedItems = data.feedItems || [];
+  mockPersonalItems = data.personalItems || [];
+  
+  saveTags();
+  saveRssFeeds();
+  saveFeedItems();
+  savePersonalItems();
+};

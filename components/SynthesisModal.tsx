@@ -1,5 +1,6 @@
 import React from 'react';
 import { CloseIcon } from './icons';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface SynthesisModalProps {
   synthesisResult: string | null;
@@ -13,7 +14,7 @@ const SynthesisModal: React.FC<SynthesisModalProps> = ({ synthesisResult, onClos
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={onClose}>
       <div 
-        className="bg-gray-900 w-full max-w-2xl max-h-[90vh] rounded-t-2xl shadow-lg flex flex-col transform animate-slide-up"
+        className="bg-gray-900 w-full max-w-2xl max-h-[90vh] rounded-t-2xl shadow-lg flex flex-col transform animate-slide-up border-t border-blue-500/30"
         onClick={(e) => e.stopPropagation()}
       >
         <style>{`
@@ -21,7 +22,7 @@ const SynthesisModal: React.FC<SynthesisModalProps> = ({ synthesisResult, onClos
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
           }
-          .animate-slide-up { animation: slide-up 0.3s ease-out; }
+          .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
         `}</style>
         <header className="p-4 border-b border-gray-800 flex justify-between items-center sticky top-0 bg-gray-900 z-10">
           <h2 className="text-xl font-bold text-gray-100">סינתזת תוכן</h2>
@@ -32,15 +33,13 @@ const SynthesisModal: React.FC<SynthesisModalProps> = ({ synthesisResult, onClos
         
         <div className="p-6 overflow-y-auto flex-grow">
           {isLoading ? (
-            <div className="flex justify-center items-center h-full">
-              <p className="text-gray-400">הבינה המלאכותית מנתחת את התוכן...</p>
+            <div className="flex flex-col justify-center items-center h-full text-center text-gray-400">
+              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse mb-4"></div>
+              <p>הבינה המלאכותית מנתחת את התוכן...</p>
+              <p className="text-xs text-gray-600">זה עשוי לקחת מספר רגעים.</p>
             </div>
           ) : (
-             <div 
-                className="prose prose-invert prose-base max-w-none text-gray-300" 
-                dangerouslySetInnerHTML={{ __html: synthesisResult ? synthesisResult.replace(/\n/g, '<br />') : '' }}
-             />
-
+             <MarkdownRenderer content={synthesisResult || ''} />
           )}
         </div>
       </div>

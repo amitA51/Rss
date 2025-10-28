@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
   <head>
@@ -6,7 +5,129 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spark</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --glow-color-blue: rgba(59, 130, 246, 0.6);
+        --glow-color-purple: rgba(139, 92, 246, 0.6);
+        --bg-color: #050509;
+        --border-color: rgba(255, 255, 255, 0.1);
+        --border-color-hover: rgba(59, 130, 246, 0.5);
+      }
+
+      body {
+        font-family: 'Assistant', sans-serif;
+        background-color: var(--bg-color);
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      .gradient-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        overflow: hidden;
+      }
+
+      .gradient-ball {
+        position: absolute;
+        border-radius: 100%;
+        opacity: 0.5;
+        filter: blur(100px);
+      }
+
+      .b1 {
+        width: 40vmax;
+        height: 40vmax;
+        background-color: var(--glow-color-blue);
+        animation: move 25s infinite alternate;
+      }
+      .b2 {
+        width: 30vmax;
+        height: 30vmax;
+        background-color: var(--glow-color-purple);
+        animation: move 30s infinite alternate-reverse;
+      }
+       .b3 {
+        width: 25vmax;
+        height: 25vmax;
+        background-color: #334155;
+        animation: move 20s infinite alternate;
+      }
+
+      @keyframes move {
+        0% { transform: translate(5vw, -10vh) scale(1); }
+        50% { transform: translate(30vw, 40vh) scale(1.2); }
+        100% { transform: translate(-20vw, 10vh) scale(0.9); }
+      }
+
+      /* Custom scrollbar for a premium feel */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(107, 114, 128, 0.5); /* gray-500 with opacity */
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.7); /* gray-400 with opacity */
+      }
+      
+      /* For prose content from Markdown */
+      .prose-custom ul {
+        list-style-position: inside;
+        padding-right: 1rem;
+      }
+      .prose-custom h1, .prose-custom h2, .prose-custom h3 {
+        margin-bottom: 0.5em;
+        margin-top: 1em;
+      }
+
+      /* Glassmorphism card style */
+      .glass-card {
+        background-color: rgba(17, 24, 39, 0.6); /* gray-900/60 */
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--border-color);
+        transition: border-color 0.3s, box-shadow 0.3s;
+      }
+      .glass-card:hover {
+        border-color: var(--border-color-hover);
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+      }
+
+      /* Screen transition animation */
+      @keyframes fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(15px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.5s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+      }
+
+      /* Modal close animation */
+      @keyframes slide-down-out {
+          from { transform: translateY(0); opacity: 1; }
+          to { transform: translateY(100%); opacity: 0; }
+      }
+      .animate-slide-down-out { animation: slide-down-out 0.4s cubic-bezier(0.64, 0, 0.34, 1) forwards; }
+
+    </style>
   <script type="importmap">
 {
   "imports": {
@@ -18,8 +139,14 @@
 }
 </script>
 </head>
-  <body class="bg-black">
+  <body class="text-gray-200">
+    <div class="gradient-bg">
+      <div class="gradient-ball b1"></div>
+      <div class="gradient-ball b2"></div>
+      <div class="gradient-ball b3"></div>
+    </div>
     <div id="root"></div>
+    <script src="https://apis.google.com/js/api.js"></script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

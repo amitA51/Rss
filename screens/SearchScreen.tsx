@@ -1,183 +1,166 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { FeedItem, Tag } from '../types';
-import { searchFeedItems, getTags, getAllItems, synthesizeContent, summarizeItemContent, updateFeedItem } from '../services/geminiService';
+import { searchFeedItems, getAllItems, updateFeedItem, summarizeItemContent, getTags } from '../services/geminiService';
 import FeedCard from '../components/FeedCard';
 import ItemDetailModal from '../components/ItemDetailModal';
 import TagCloud from '../components/TagCloud';
-import SynthesisModal from '../components/SynthesisModal';
-import { SearchIcon, VisualModeIcon, BrainCircuitIcon } from '../components/icons';
+import { SearchIcon } from '../components/icons';
 
-type SearchMode = 'text' | 'visual';
+const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+    return debouncedValue;
+};
 
 const SearchScreen: React.FC = () => {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FeedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
-  const [allItems, setAllItems] = useState<FeedItem[]>([]);
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [searchMode, setSearchMode] = useState<SearchMode>('text');
-  
-  const [synthesisResult, setSynthesisResult] = useState<string | null>(null);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<FeedItem[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [tags, setTags] = useState<Tag[]>([]);
 
-  useEffect(() => {
-    const loadInitialData = async () => {
-        const [items, tags] = await Promise.all([getAllItems(), getTags()]);
-        setAllItems(items);
-        setAllTags(tags);
+    const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
+    const [allItems, setAllItems] = useState<FeedItem[]>([]);
+    const [isSummarizing, setIsSummarizing] = useState(false);
+    
+    const debouncedQuery = useDebounce(query, 500);
+
+    useEffect(() => {
+        const loadAllData = async () => {
+            const [items, fetchedTags] = await Promise.all([getAllItems(), getTags()]);
+            setAllItems(items);
+            setTags(fetchedTags);
+        };
+        loadAllData();
+    }, []);
+
+    useEffect(() => {
+        if (debouncedQuery) {
+            setIsLoading(true);
+            setHasSearched(true);
+            searchFeedItems(debouncedQuery).then(items => {
+                setResults(items);
+                setIsLoading(false);
+            });
+        } else {
+            setResults([]);
+            setIsLoading(false);
+            // setHasSearched(false); // Uncomment if you want the tag cloud to reappear when query is cleared
+        }
+    }, [debouncedQuery]);
+
+    const handleLongPress = (item: FeedItem) => setSelectedItem(item);
+    const handleCloseModal = () => setSelectedItem(null);
+
+    const handleToggleRead = async (id: string) => {
+        const originalResults = results;
+        const currentItem = allItems.find(item => item.id === id);
+        if (!currentItem) return;
+        
+        const updatedStatus = !currentItem.is_read;
+
+        setResults(results.map(item =>
+            item.id === id ? { ...item, is_read: updatedStatus } : item
+        ));
+        
+        setAllItems(allItems.map(item =>
+            item.id === id ? { ...item, is_read: updatedStatus } : item
+        ));
+
+        try {
+            await updateFeedItem(id, { is_read: updatedStatus });
+        } catch (error) {
+            console.error("Failed to update read status:", error);
+            setResults(originalResults);
+             setAllItems(allItems.map(item =>
+                item.id === id ? { ...item, is_read: currentItem.is_read } : item
+            ));
+        }
     };
-    loadInitialData();
-  }, []);
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedQuery(query);
-    }, 500);
-
-    return () => clearTimeout(handler);
-  }, [query]);
-
-  const performSearch = useCallback(async (searchQuery: string) => {
-      if (searchQuery.length < 1) {
-        setResults([]);
-        return;
-      }
-      setIsLoading(true);
+    const handleSummarize = async (itemToSummarize: FeedItem) => {
+      if (!itemToSummarize || isSummarizing) return;
+      setIsSummarizing(true);
       try {
-        const searchResults = await searchFeedItems(searchQuery);
-        setResults(searchResults);
+          const summary = await summarizeItemContent(itemToSummarize.content);
+          const updatedItem = await updateFeedItem(itemToSummarize.id, { summary_ai: summary });
+          
+          setResults(results.map(item => item.id === updatedItem.id ? updatedItem : item));
+          setAllItems(allItems.map(item => item.id === updatedItem.id ? updatedItem : item));
+          setSelectedItem(updatedItem);
+
       } catch (error) {
-        console.error("Search failed:", error);
+          console.error("Failed to summarize:", error);
+          alert("שגיאה בעת ניסיון הסיכום.");
       } finally {
-        setIsLoading(false);
+          setIsSummarizing(false);
       }
-  }, []);
+    };
+    
+    const handleTagClick = (tagName: string) => {
+        setQuery(tagName);
+    };
 
-  useEffect(() => {
-    if (searchMode === 'text') {
-        performSearch(debouncedQuery);
-    }
-  }, [debouncedQuery, performSearch, searchMode]);
+    return (
+        <div className="pt-4 pb-4">
+            <header className="mb-4 sticky top-0 bg-black/80 backdrop-blur-md py-3 z-20 -mx-4 px-4 border-b border-[var(--border-color)]">
+                <h1 className="text-3xl font-bold text-gray-100">חיפוש</h1>
+                <div className="relative mt-4">
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                        <SearchIcon className="h-5 w-5 text-gray-500" />
+                    </div>
+                    <input
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="חפש בספארקים, מאמרים, תגיות..."
+                        className="w-full bg-gray-900/80 border border-[var(--border-color)] text-gray-200 rounded-full p-3 pr-11 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
+                    />
+                </div>
+            </header>
 
-  const handleTagClick = (tagName: string) => {
-      setQuery(tagName);
-      setSearchMode('text');
-      performSearch(tagName);
-  };
-
-  const handleSynthesize = async () => {
-      if (results.length === 0 || isSynthesizing) return;
-      setIsSynthesizing(true);
-      try {
-          const synthesis = await synthesizeContent(results);
-          setSynthesisResult(synthesis);
-      } catch (error) {
-          console.error("Synthesis failed:", error);
-          alert("שגיאה ביצירת הסינתזה.");
-      } finally {
-          setIsSynthesizing(false);
-      }
-  };
-
-  const handleLongPress = (item: FeedItem) => setSelectedItem(item);
-  const handleCloseModal = () => setSelectedItem(null);
-  
-  const handleToggleRead = async (id: string) => {
-    const originalResults = [...results];
-    setResults(results.map(item => item.id === id ? {...item, is_read: !item.is_read} : item));
-    try {
-      await updateFeedItem(id, { is_read: !originalResults.find(i => i.id === id)?.is_read });
-    } catch {
-      setResults(originalResults); // Revert on failure
-    }
-  };
-  
-  const handleSummarize = async () => alert("סיכום אינו זמין מתוצאות החיפוש. פתח את הפריט מהפיד הראשי.");
-
-  const tagsWithCounts = useMemo(() => {
-      const counts = new Map<string, number>();
-      allItems.forEach(item => {
-          item.tags.forEach(tag => {
-              counts.set(tag.id, (counts.get(tag.id) || 0) + 1);
-          });
-      });
-      return allTags
-        .map(tag => ({ tag, count: counts.get(tag.id) || 0 }))
-        .filter(t => t.count > 0)
-        .sort((a, b) => b.count - a.count);
-  }, [allItems, allTags]);
-
-  return (
-    <div className="p-4">
-      <header className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-100">חיפוש</h1>
-        <button
-            onClick={() => setSearchMode(prev => prev === 'text' ? 'visual' : 'text')}
-            className="p-2 rounded-full text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
-            aria-label="שנה מצב חיפוש"
-        >
-            {searchMode === 'text' ? <VisualModeIcon className="h-6 w-6" /> : <SearchIcon className="h-6 w-6" />}
-        </button>
-      </header>
-      
-      {searchMode === 'text' ? (
-        <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="חפש לפי תוכן או תגית..."
-            className="w-full bg-gray-800 border border-gray-700 text-gray-200 rounded-lg p-3 mb-6 focus:ring-blue-500 focus:border-blue-500"
-        />
-      ) : (
-        <div className="mb-6">
-            <TagCloud tagsWithCounts={tagsWithCounts} onTagClick={handleTagClick} />
+            <div className="space-y-4">
+                {isLoading ? (
+                    <p className="text-center text-gray-400 py-8">מחפש...</p>
+                ) : debouncedQuery && results.length === 0 ? (
+                    <div className="text-center text-gray-500 mt-16 flex flex-col items-center">
+                        <SearchIcon className="w-16 h-16 text-gray-700 mb-4"/>
+                        <p className="max-w-xs">לא נמצאו תוצאות עבור "{query}"</p>
+                    </div>
+                ) : !debouncedQuery ? (
+                    <div className="text-center text-gray-500 mt-8 flex flex-col items-center">
+                         <h2 className="text-lg font-semibold text-gray-300 mb-4">גלה לפי תגית</h2>
+                         <TagCloud items={allItems} tags={tags} onTagClick={handleTagClick} />
+                    </div>
+                ) : (
+                    results.map((item, index) => (
+                        <FeedCard
+                            key={item.id}
+                            item={item}
+                            index={index}
+                            onLongPress={handleLongPress}
+                            onToggleRead={handleToggleRead}
+                        />
+                    ))
+                )}
+            </div>
+            <ItemDetailModal
+                item={selectedItem}
+                allItems={allItems}
+                onSelectItem={setSelectedItem}
+                onClose={handleCloseModal}
+                onSummarize={handleSummarize}
+                isSummarizing={isSummarizing}
+            />
         </div>
-      )}
-
-      {results.length > 0 && (
-          <button
-              onClick={handleSynthesize}
-              disabled={isSynthesizing}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg mb-6 transition-colors"
-          >
-              <BrainCircuitIcon className="h-5 w-5" />
-              {isSynthesizing ? 'מסנתז...' : 'סנתז תוצאות'}
-          </button>
-      )}
-
-      {isLoading && <p className="text-center text-gray-400">מחפש...</p>}
-      {!isLoading && debouncedQuery.length > 0 && results.length === 0 && searchMode === 'text' && (
-        <p className="text-center text-gray-500">לא נמצאו תוצאות.</p>
-      )}
-
-      <div className="space-y-4">
-        {results.map(item => (
-          <FeedCard 
-            key={item.id} 
-            item={item} 
-            onLongPress={handleLongPress} 
-            onToggleRead={handleToggleRead} 
-          />
-        ))}
-      </div>
-
-       <ItemDetailModal 
-        item={selectedItem}
-        allItems={allItems}
-        onSelectItem={setSelectedItem} 
-        onClose={handleCloseModal}
-        onSummarize={handleSummarize}
-        isSummarizing={false}
-      />
-      <SynthesisModal 
-        synthesisResult={synthesisResult}
-        onClose={() => setSynthesisResult(null)}
-        isLoading={isSynthesizing}
-      />
-    </div>
-  );
+    );
 };
 
 export default SearchScreen;
