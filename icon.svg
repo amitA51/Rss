@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" rx="60" fill="#050509"/>
+<path d="M269.487 113.818C263.242 102.66 248.758 102.66 242.513 113.818L139.652 301.401C135.034 309.817 141.51 319.5 150.861 319.5H231V379.5C231 389.165 238.835 397 248.5 397H263.5C273.165 397 281 389.165 281 379.5V292.5H361.139C370.49 292.5 376.966 282.817 372.348 274.401L269.487 113.818Z" fill="url(#spark-gradient)"/>
+<defs>
+<linearGradient id="spark-gradient" x1="256" y1="108" x2="256" y2="397" gradientUnits="userSpaceOnUse">
+<stop stop-color="#3B82F6"/>
+<stop offset="1" stop-color="#8B5CF6"/>
+</linearGradient>
+</defs>
+</svg>

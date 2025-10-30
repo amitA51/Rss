@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { PersonalItem } from '../types';
-import { CloseIcon, DumbbellIcon, SummarizeIcon, ClipboardListIcon, LinkIcon } from './icons';
+import { CloseIcon, DumbbellIcon, SummarizeIcon, ClipboardListIcon, LinkIcon, CheckCircleIcon, FlameIcon, TargetIcon, BookOpenIcon, TrashIcon } from './icons';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface PersonalItemDetailModalProps {
@@ -11,6 +11,15 @@ interface PersonalItemDetailModalProps {
 
 const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item, onClose, onUpdate }) => {
   const [isClosing, setIsClosing] = useState(false);
+  const [currentPageInput, setCurrentPageInput] = useState(item?.currentPage?.toString() || '');
+  const [newQuote, setNewQuote] = useState('');
+
+  React.useEffect(() => {
+    if (item) {
+        setCurrentPageInput(item.currentPage?.toString() || '0');
+    }
+  }, [item]);
+
 
   const handleClose = () => {
     setIsClosing(true);
@@ -30,6 +39,28 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
       }
       onUpdate(item.id, { content: lines.join('\n') });
   };
+
+  const handleUpdateCurrentPage = () => {
+      const page = parseInt(currentPageInput, 10);
+      if (!isNaN(page) && item) {
+          onUpdate(item.id, { currentPage: page });
+      }
+  };
+  
+  const handleAddQuote = () => {
+      if (newQuote.trim() && item) {
+          const updatedQuotes = [...(item.quotes || []), newQuote.trim()];
+          onUpdate(item.id, { quotes: updatedQuotes });
+          setNewQuote('');
+      }
+  };
+
+  const handleRemoveQuote = (index: number) => {
+      if(item) {
+        const updatedQuotes = item.quotes?.filter((_, i) => i !== index) || [];
+        onUpdate(item.id, { quotes: updatedQuotes });
+      }
+  };
   
   const getIcon = () => {
     switch (item.type) {
@@ -37,6 +68,11 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
       case 'learning': return <SummarizeIcon className="h-6 w-6 text-purple-400" />;
       case 'note': return <ClipboardListIcon className="h-6 w-6 text-yellow-400" />;
       case 'link': return <LinkIcon className="h-6 w-6 text-green-400" />;
+      case 'task': return <CheckCircleIcon className="h-6 w-6 text-indigo-400" />;
+      case 'habit': return <FlameIcon className="h-6 w-6 text-orange-400" />;
+      case 'goal': return <TargetIcon className="h-6 w-6 text-red-400" />;
+      case 'journal': return <BookOpenIcon className="h-6 w-6 text-teal-400" />;
+      case 'book': return <BookOpenIcon className="h-6 w-6 text-orange-400" />;
       default: return null;
     }
   };
@@ -83,6 +119,46 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
                         </div>
                     )}
                      {item.content && <div className="mt-6 border-t border-[var(--border-color)] pt-4"><h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">הערות</h4><p className="text-gray-300 whitespace-pre-wrap">{item.content}</p></div>}
+                </div>
+            );
+        case 'book':
+            const progress = (item.totalPages && item.currentPage) ? Math.round((item.currentPage / item.totalPages) * 100) : 0;
+            return (
+                 <div className="space-y-6">
+                    <div>
+                        <h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">התקדמות</h4>
+                         <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
+                            <div className="bg-orange-400 h-2.5 rounded-full" style={{width: `${progress}%`}}></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <input type="number" value={currentPageInput} onChange={e => setCurrentPageInput(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-md p-2 w-24 text-center"/>
+                           <span className="text-gray-400">/ {item.totalPages} עמודים</span>
+                           <button onClick={handleUpdateCurrentPage} className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold">עדכן</button>
+                        </div>
+                    </div>
+                     {item.content && (
+                        <div>
+                            <h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">תקציר / הערות</h4>
+                            <p className="text-gray-300 whitespace-pre-wrap">{item.content}</p>
+                        </div>
+                     )}
+                     <div>
+                        <h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">ציטוטים</h4>
+                        <div className="space-y-2">
+                            {item.quotes && item.quotes.map((quote, index) => (
+                                <div key={index} className="group flex items-start gap-2 bg-gray-800/50 p-3 rounded-md">
+                                    <p className="flex-1 text-gray-300 italic">"{quote}"</p>
+                                    <button onClick={() => handleRemoveQuote(index)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity">
+                                        <TrashIcon className="w-4 h-4"/>
+                                    </button>
+                                </div>
+                            ))}
+                             <div className="flex items-center gap-2 pt-2">
+                                <textarea value={newQuote} onChange={e => setNewQuote(e.target.value)} placeholder="הוסף ציטוט חדש..." rows={2} className="flex-1 bg-gray-800 border border-gray-700 rounded-md p-2"/>
+                                <button onClick={handleAddQuote} className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold self-stretch">הוסף</button>
+                            </div>
+                        </div>
+                     </div>
                 </div>
             );
         case 'learning':
@@ -143,8 +219,48 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
                         <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover rounded-lg bg-gray-800" />
                     )}
                     <div>
-                        <h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">סיכום AI</h4>
+                        <h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">סיכום</h4>
                         <p className="text-gray-300 whitespace-pre-wrap">{item.content}</p>
+                    </div>
+                </div>
+            );
+        case 'task':
+            return (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <span className={`px-3 py-1 text-sm rounded-full ${item.isCompleted ? 'bg-green-600' : 'bg-gray-600'} text-white`}>{item.isCompleted ? 'הושלם' : 'לביצוע'}</span>
+                        <span className={`capitalize px-3 py-1 text-sm rounded-full bg-gray-700 text-gray-200`}>עדיפות: {item.priority === 'low' ? 'נמוכה' : item.priority === 'medium' ? 'בינונית' : 'גבוהה'}</span>
+                         {item.dueDate && <span className="px-3 py-1 text-sm rounded-full bg-gray-700 text-gray-200">תאריך יעד: {new Date(item.dueDate).toLocaleDateString('he-IL')}</span>}
+                    </div>
+                    {item.content && <div className="mt-6 border-t border-[var(--border-color)] pt-4"><h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">הערות</h4><p className="text-gray-300 whitespace-pre-wrap">{item.content}</p></div>}
+                </div>
+            );
+        case 'habit':
+             return (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <span className="px-3 py-1 text-sm rounded-full bg-gray-700 text-gray-200">רצף נוכחי: {item.streak || 0} ימים</span>
+                        <span className="px-3 py-1 text-sm rounded-full bg-gray-700 text-gray-200">תדירות: {item.frequency === 'daily' ? 'יומי' : 'שבועי'}</span>
+                    </div>
+                    {item.lastCompleted && <p className="text-gray-300"><strong>הושלם לאחרונה:</strong> {new Date(item.lastCompleted).toLocaleString('he-IL')}</p>}
+                    {item.content && <div className="mt-6 border-t border-[var(--border-color)] pt-4"><h4 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">תיאור</h4><p className="text-gray-300 whitespace-pre-wrap">{item.content}</p></div>}
+                </div>
+            );
+        case 'goal':
+             return (
+                 <div className="space-y-4">
+                     {item.metadata?.targetDate && <p className="text-gray-300"><strong>תאריך יעד:</strong> {new Date(item.metadata.targetDate).toLocaleDateString('he-IL')}</p>}
+                     {item.content && <MarkdownRenderer content={item.content} />}
+                 </div>
+             );
+        case 'journal':
+            return (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                        {item.metadata?.mood && <p className="capitalize px-3 py-1 text-sm rounded-full bg-gray-700 text-gray-200"><strong>מצב רוח:</strong> {item.metadata.mood}</p>}
+                    </div>
+                    <div className="prose-custom whitespace-pre-wrap border-t border-[var(--border-color)] pt-4 mt-4">
+                        <MarkdownRenderer content={item.content} />
                     </div>
                 </div>
             );
@@ -168,14 +284,17 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
         <header className="p-4 border-b border-[var(--border-color)] flex justify-between items-center sticky top-0 bg-gray-900/80 backdrop-blur-sm z-10">
           <div className="flex items-center gap-3 overflow-hidden">
               {getIcon()}
-              <h2 className="text-xl font-bold text-gray-100 truncate pr-4">{item.title}</h2>
+              <div className="flex flex-col overflow-hidden">
+                <h2 className="text-xl font-bold text-gray-100 truncate">{item.title}</h2>
+                {item.type === 'book' && <p className="text-sm text-gray-400 truncate">{item.author}</p>}
+              </div>
           </div>
           <button onClick={handleClose} className="text-gray-500 hover:text-white transition-colors">
             <CloseIcon className="h-6 w-6" />
           </button>
         </header>
         
-        <div className="p-6 overflow-y-auto flex-grow">
+        <div className="p-4 overflow-y-auto flex-grow">
             <div className="flex items-center gap-4 mb-6">
                 {item.type === 'learning' && getStatusBadge(item.metadata?.status)}
                 {item.type === 'workout' && item.metadata?.duration && (

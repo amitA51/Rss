@@ -1,0 +1,25 @@
+{
+  "name": "Spark Personal Terminal",
+  "short_name": "Spark",
+  "description": "A zero-maintenance personal terminal for your thoughts and feeds. Dark mode only, Hebrew UI, powered by AI for summarization and tagging.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#050509",
+  "theme_color": "#050509",
+  "lang": "he",
+  "dir": "rtl"
+}

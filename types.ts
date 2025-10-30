@@ -11,7 +11,7 @@ export interface Attachment {
 }
 
 export interface FeedItem {
-  id: string;
+  id:string;
   type: 'rss' | 'spark';
   title: string;
   link?: string;
@@ -43,10 +43,10 @@ export interface Exercise {
 
 export interface PersonalItem {
   id: string;
-  type: 'workout' | 'note' | 'learning' | 'link';
+  type: 'workout' | 'note' | 'learning' | 'link' | 'task' | 'habit' | 'goal' | 'journal' | 'book';
   createdAt: string;
   title: string;
-  content: string; // Used for notes, link summaries, and general description for learning/workouts
+  content: string; // Used for notes, link summaries, journal entries, book summaries
   
   // Link specific
   url?: string;
@@ -56,6 +56,23 @@ export interface PersonalItem {
   // Workout specific
   exercises?: Exercise[];
   
+  // Task specific
+  isCompleted?: boolean;
+  dueDate?: string;
+  priority?: 'low' | 'medium' | 'high';
+
+  // Habit specific
+  streak?: number;
+  lastCompleted?: string; // ISO date string
+  frequency?: 'daily' | 'weekly';
+  
+  // Book specific
+  author?: string;
+  totalPages?: number;
+  currentPage?: number;
+  quotes?: string[];
+  coverImageUrl?: string;
+
   // Metadata for various types
   metadata?: {
     // For workouts
@@ -65,17 +82,32 @@ export interface PersonalItem {
     status?: 'to-learn' | 'learning' | 'learned';
     source?: string; // Can be a URL, but also a book title etc.
     key_takeaways?: string[];
+    // For goals
+    targetDate?: string;
+    // For journal
+    mood?: 'awful' | 'bad' | 'ok' | 'good' | 'great';
     // For links (AI suggested)
     suggestedTags?: string[];
+    // For books
+    bookStatus?: 'to-read' | 'reading' | 'finished';
   };
 }
+
+export interface Template {
+  id: string;
+  name: string;
+  type: PersonalItem['type'];
+  // The content is a partial PersonalItem that holds the template data
+  content: Partial<PersonalItem>;
+}
+
 
 // --- New Types for Settings and Data Management ---
 
 export interface AppSettings {
   aiModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
   autoSummarize: boolean;
-  defaultScreen: 'feed' | 'personal';
+  defaultScreen: 'feed' | 'home';
 }
 
 export interface AppData {
@@ -83,6 +115,7 @@ export interface AppData {
   rssFeeds: RssFeed[];
   feedItems: FeedItem[];
   personalItems: PersonalItem[];
+  templates: Template[];
 }
 
 export interface ExportData {

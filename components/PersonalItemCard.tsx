@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import type { PersonalItem } from '../types';
-import { DumbbellIcon, SummarizeIcon, ClipboardListIcon, TrashIcon, LinkIcon, FileIcon } from './icons';
+import { DumbbellIcon, SummarizeIcon, ClipboardListIcon, TrashIcon, LinkIcon, FileIcon, BookOpenIcon } from './icons';
 
 interface PersonalItemCardProps {
   item: PersonalItem;
@@ -15,6 +15,7 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onDelete, onS
       case 'learning': return <SummarizeIcon className="h-6 w-6 text-purple-400" />;
       case 'note': return <ClipboardListIcon className="h-6 w-6 text-yellow-400" />;
       case 'link': return <LinkIcon className="h-6 w-6 text-green-400" />;
+      case 'book': return <BookOpenIcon className="h-6 w-6 text-orange-400" />;
       default: return null;
     }
   };
@@ -75,6 +76,28 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onDelete, onS
               </div>
           );
       }
+      
+      if (item.type === 'book') {
+          const progress = (item.totalPages && item.currentPage) ? (item.currentPage / item.totalPages) * 100 : 0;
+          return (
+             <div className="flex justify-between items-start gap-4">
+                <div className="flex-shrink-0 pt-1">{getIcon()}</div>
+                <div className="flex-1 overflow-hidden">
+                    <h3 className="font-semibold text-gray-100 truncate">{item.title}</h3>
+                    <p className="text-sm text-gray-400 mt-1 truncate">{item.author}</p>
+                    <div className="mt-3">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>התקדמות</span>
+                            <span>עמ' {item.currentPage}/{item.totalPages}</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                            <div className="bg-orange-400 h-1.5 rounded-full" style={{width: `${progress}%`}}></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+          );
+      }
 
       return (
         <div className="flex justify-between items-start gap-4">
@@ -111,7 +134,7 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onDelete, onS
       {renderCardContent()}
        <button
           onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-          className="absolute top-2 left-2 text-gray-600 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 transform hover:scale-110 flex-shrink-0"
+          className="absolute top-2 left-2 text-gray-600 hover:text-red-400 transition-all transform hover:scale-110 flex-shrink-0"
           aria-label="מחק פריט"
         >
           <TrashIcon className="h-5 w-5" />

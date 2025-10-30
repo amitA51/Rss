@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { AppSettings } from '../types';
+import type { AppSettings, Template } from '../types';
 import { loadSettings, saveSettings, wipeAllData } from '../services/settingsService';
-import { exportAllData, importAllData } from '../services/geminiService';
-import { HomeIcon, AiChipIcon, DatabaseIcon, DownloadIcon, UploadIcon, WarningIcon, FeedIcon, UserIcon, FileIcon } from '../components/icons';
+import { exportAllData, importAllData, getTemplates, removeTemplate } from '../services/geminiService';
+import { HomeIcon, AiChipIcon, DatabaseIcon, DownloadIcon, UploadIcon, WarningIcon, FeedIcon, UserIcon, FileIcon, LayoutDashboardIcon, TemplateIcon, TrashIcon } from '../components/icons';
 import ToggleSwitch from '../components/ToggleSwitch';
 import ManageContentModal from '../components/ManageContentModal';
 
@@ -21,11 +21,16 @@ const SettingsCard: React.FC<{title: string, children: React.ReactNode, icon: Re
 const SettingsScreen: React.FC = () => {
     const [settings, setSettings] = useState<AppSettings>(loadSettings);
     const [isManageContentOpen, setIsManageContentOpen] = useState(false);
+    const [templates, setTemplates] = useState<Template[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         saveSettings(settings);
     }, [settings]);
+
+    useEffect(() => {
+        getTemplates().then(setTemplates);
+    }, []);
 
     const handleSettingChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
         setSettings(prev => ({ ...prev, [key]: value }));
@@ -63,6 +68,13 @@ const SettingsScreen: React.FC = () => {
         e.target.value = ''; // Reset for next import
     };
     
+    const handleDeleteTemplate = async (id: string) => {
+        if (window.confirm("האם למחוק את התבנית?")) {
+            await removeTemplate(id);
+            setTemplates(prev => prev.filter(t => t.id !== id));
+        }
+    };
+
     return (
     <>
       <div className="pt-4 space-y-8">
@@ -73,7 +85,7 @@ const SettingsScreen: React.FC = () => {
                 <p className="text-gray-300">מסך פתיחה</p>
                 <div className="flex items-center gap-2 p-1 bg-gray-800 rounded-full">
                     <button onClick={() => handleSettingChange('defaultScreen', 'feed')} className={`px-3 py-1 text-sm rounded-full flex items-center gap-1 ${settings.defaultScreen === 'feed' ? 'bg-blue-600' : ''}`}><FeedIcon className="w-4 h-4"/> פיד</button>
-                    <button onClick={() => handleSettingChange('defaultScreen', 'personal')} className={`px-3 py-1 text-sm rounded-full flex items-center gap-1 ${settings.defaultScreen === 'personal' ? 'bg-blue-600' : ''}`}><UserIcon className="w-4 h-4"/> אישי</button>
+                    <button onClick={() => handleSettingChange('defaultScreen', 'home')} className={`px-3 py-1 text-sm rounded-full flex items-center gap-1 ${settings.defaultScreen === 'home' ? 'bg-blue-600' : ''}`}><LayoutDashboardIcon className="w-4 h-4"/> בית</button>
                 </div>
             </div>
         </SettingsCard>
@@ -104,6 +116,27 @@ const SettingsScreen: React.FC = () => {
             </button>
         </SettingsCard>
 
+        <SettingsCard title="תבניות" icon={<TemplateIcon className="w-6 h-6 text-gray-400"/>}>
+            <p className="text-gray-400 mb-4">נהל את התבניות השמורות שלך. ניתן ליצור תבניות חדשות ממסך ההוספה.</p>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {templates.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">אין תבניות שמורות.</p>
+                ) : (
+                    templates.map(template => (
+                        <div key={template.id} className="group flex items-center justify-between bg-gray-800/60 p-3 rounded-lg">
+                            <div>
+                                <p className="font-medium text-gray-200">{template.name}</p>
+                                <p className="text-sm text-gray-500 capitalize">{template.type}</p>
+                            </div>
+                            <button onClick={() => handleDeleteTemplate(template.id)} className="text-gray-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <TrashIcon className="h-5 w-5" />
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
+        </SettingsCard>
+
          <SettingsCard title="ניהול נתונים" icon={<DatabaseIcon className="w-6 h-6 text-gray-400"/>}>
             <div className="space-y-3">
                  <button onClick={handleExport} className="w-full flex items-center justify-center gap-2 bg-gray-700/80 hover:bg-gray-600/80 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
@@ -123,7 +156,7 @@ const SettingsScreen: React.FC = () => {
          </SettingsCard>
 
         <div className="text-center pb-4">
-            <p className="text-sm text-gray-600 mt-4">Spark v2.2 - Premium Edition</p>
+            <p className="text-sm text-gray-600 mt-4">Spark v3.0 - LifeOS Edition</p>
         </div>
       </div>
       

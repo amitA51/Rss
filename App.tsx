@@ -1,48 +1,38 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
 import BottomNavBar from './components/BottomNavBar';
 import FeedScreen from './screens/FeedScreen';
-import AddSparkScreen from './screens/AddSparkScreen';
+import HomeScreen from './screens/HomeScreen';
+import AddScreen from './screens/AddScreen';
 import SearchScreen from './screens/SearchScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import PersonalScreen from './screens/PersonalScreen';
-import AssistantScreen from './screens/AssistantScreen';
 import { loadSettings } from './services/settingsService';
 
-export type Screen = 'feed' | 'add' | 'search' | 'settings' | 'personal' | 'assistant';
+export type Screen = 'feed' | 'search' | 'add' | 'home' | 'settings';
 
 const App: React.FC = () => {
-  const [activeScreen, setActiveScreen] = useState<Screen>('feed');
+  const [activeScreen, setActiveScreen] = useState<Screen>(loadSettings().defaultScreen);
 
-  useEffect(() => {
-    const settings = loadSettings();
-    setActiveScreen(settings.defaultScreen);
-  }, []);
-
-  const renderScreen = useCallback(() => {
+  const renderScreen = () => {
     switch (activeScreen) {
       case 'feed':
         return <FeedScreen />;
+      case 'home':
+        return <HomeScreen />;
       case 'add':
-        return <AddSparkScreen setActiveScreen={setActiveScreen} />;
+        return <AddScreen setActiveScreen={setActiveScreen} />;
       case 'search':
         return <SearchScreen />;
       case 'settings':
         return <SettingsScreen />;
-      case 'personal':
-        return <PersonalScreen />;
-       case 'assistant':
-        return <AssistantScreen />;
       default:
-        return <FeedScreen />;
+        return <HomeScreen />;
     }
-  }, [activeScreen]);
+  };
 
   return (
-    <div className="min-h-screen">
-      <main className="pb-24 max-w-4xl mx-auto px-2 sm:px-4">
-        <div key={activeScreen} className="animate-fade-in-up">
-          {renderScreen()}
-        </div>
+    <div className="max-w-2xl mx-auto px-4 pb-24">
+      <main className="animate-fade-in-up">
+        {renderScreen()}
       </main>
       <BottomNavBar activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
     </div>

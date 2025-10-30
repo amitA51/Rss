@@ -5,7 +5,7 @@ const SETTINGS_KEY = 'spark_app_settings';
 const defaultSettings: AppSettings = {
   aiModel: 'gemini-2.5-flash',
   autoSummarize: false,
-  defaultScreen: 'feed',
+  defaultScreen: 'home',
 };
 
 export const loadSettings = (): AppSettings => {
@@ -34,6 +34,7 @@ const APP_DATA_KEYS = [
     'spark_rss_feeds',
     'spark_feed_items',
     'spark_personal_items',
+    'spark_templates',
     SETTINGS_KEY,
 ];
 

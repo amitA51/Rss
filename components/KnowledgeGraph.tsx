@@ -31,7 +31,7 @@ const CENTER_STRENGTH = 0.02;
 
 const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const simulationRef = useRef<number>();
+  const simulationRef = useRef<number | null>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
@@ -41,13 +41,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
 
   const initialData = useMemo(() => {
     const uniqueTags = new Map<string, Tag>();
-    items.forEach(item => {
-      item.tags.forEach(tag => {
+    for (const item of items) {
+      for (const tag of item.tags) {
         if (!uniqueTags.has(tag.id)) {
           uniqueTags.set(tag.id, tag);
         }
-      });
-    });
+      }
+    }
 
     const itemNodes: Node[] = items.map(item => ({
       id: item.id,
@@ -70,13 +70,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
     }));
 
     const newLinks: Link[] = [];
-    items.forEach(item => {
-      item.tags.forEach(tag => {
+    for (const item of items) {
+      for (const tag of item.tags) {
         if (uniqueTags.has(tag.id)) {
           newLinks.push({ source: item.id, target: tag.id });
         }
-      });
-    });
+      }
+    }
 
     return { nodes: [...itemNodes, ...tagNodes], links: newLinks };
   }, [items]);
@@ -100,8 +100,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
       if (width === 0) return prevNodes;
   
       const mutableNodes = prevNodes.map(n => ({ ...n }));
-      // FIX: Explicitly typing nodeMap resolves a type inference issue where TypeScript
-      // was unable to determine the type of nodes retrieved from the map, causing multiple errors.
       const nodeMap: Map<string, Node> = new Map(mutableNodes.map(n => [n.id, n]));
   
       // Calculate and apply all forces to velocities.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FeedIcon, AddIcon, SearchIcon, SettingsIcon, UserIcon } from './icons';
+import { FeedIcon, AddIcon, SearchIcon, SettingsIcon, LayoutDashboardIcon } from './icons';
 
-type Screen = 'feed' | 'add' | 'search' | 'settings' | 'personal';
+type Screen = 'feed' | 'add' | 'search' | 'settings' | 'home';
 
 interface BottomNavBarProps {
   activeScreen: Screen;
@@ -18,15 +18,15 @@ const NavItem: React.FC<{
   <button
     ref={itemRef}
     onClick={onClick}
-    className={`relative z-10 flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-300 group ${
+    className={`relative z-10 flex flex-col items-center justify-center w-full h-full transition-colors duration-300 group ${
       isActive ? 'text-white' : 'text-gray-400 hover:text-white'
     }`}
     aria-label={label}
   >
-    <div className="transition-transform duration-300 transform-gpu group-hover:-translate-y-1">
+    <div className="transition-transform duration-300 transform-gpu group-hover:-translate-y-1 group-hover:scale-110 group-active:scale-95">
       {icon}
     </div>
-    <span className="text-xs mt-1">{label}</span>
+    <span className={`text-xs mt-1 transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{label}</span>
   </button>
 );
 
@@ -39,7 +39,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeScreen, setActiveScre
     { id: 'feed', label: 'פיד', icon: <FeedIcon className="h-6 w-6" /> },
     { id: 'search', label: 'חיפוש', icon: <SearchIcon className="h-6 w-6" /> },
     { id: 'add', label: 'הוספה', icon: <AddIcon className="h-7 w-7" /> },
-    { id: 'personal', label: 'אישי', icon: <UserIcon className="h-6 w-6" /> },
+    { id: 'home', label: 'בית', icon: <LayoutDashboardIcon className="h-6 w-6" /> },
     { id: 'settings', label: 'הגדרות', icon: <SettingsIcon className="h-6 w-6" /> },
   ] as const;
 
@@ -56,32 +56,23 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeScreen, setActiveScre
       
       setIndicatorStyle({
         width: `${itemRect.width * 0.7}px`,
-        height: `${itemRect.height}px`,
+        height: `calc(${itemRect.height}px - 2.5rem)`,
         left: `${itemRect.left - navRect.left + (itemRect.width * 0.15)}px`,
-        top: `${itemRect.top - navRect.top}px`,
+        top: '0.5rem',
       });
     }
   }, [activeScreen]);
 
   return (
     <>
-      <svg className="absolute w-0 h-0">
-        <defs>
-          <filter id="gooey">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
-            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
-            <feBlend in="SourceGraphic" in2="goo" />
-          </filter>
-        </defs>
-      </svg>
       <nav 
         ref={navRef}
-        className="fixed bottom-0 right-0 left-0 bg-black/60 backdrop-blur-lg border-t border-gray-800/70"
-        style={{ filter: 'url(#gooey)' }}
+        className="fixed bottom-0 right-0 left-0 h-20 bg-gradient-to-t from-black/80 via-black/70 to-black/60 backdrop-blur-lg border-t border-gray-700/50"
       >
-        <div className="flex justify-around max-w-md mx-auto relative">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
+        <div className="flex justify-around max-w-md mx-auto relative h-full">
           <div 
-            className="absolute bg-blue-600 rounded-full transition-all duration-500 ease-in-out-back"
+            className="absolute bg-blue-600/50 rounded-2xl transition-all duration-500 ease-in-out-back"
             style={indicatorStyle}
           ></div>
           {navItems.map((item) => (

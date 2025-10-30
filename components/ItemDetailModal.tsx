@@ -70,7 +70,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, allItems, onSel
           </button>
         </header>
         
-        <div className="p-6 overflow-y-auto flex-grow">
+        <div className="p-4 overflow-y-auto flex-grow">
           {item.summary_ai && (
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-blue-400 mb-2 uppercase tracking-wider">סיכום AI</h3>

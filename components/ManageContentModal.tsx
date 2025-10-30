@@ -122,7 +122,7 @@ const ManageContentModal: React.FC<ManageContentModalProps> = ({ onClose }) => {
           </button>
         </header>
 
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="p-4 overflow-y-auto space-y-6">
             <SettingsSection title="ניהול פידים (RSS)">
                 <form onSubmit={handleAddFeed} className="flex gap-2 mb-6">
                     <input type="url" value={newFeedUrl} onChange={(e) => setNewFeedUrl(e.target.value)} placeholder="הדבק כתובת URL של פיד" className={inputStyles} required />

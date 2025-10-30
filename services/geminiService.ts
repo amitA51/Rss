@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { FeedItem, Tag, RssFeed, Attachment, PersonalItem, ExportData } from '../types';
-import { mockFeedItems, mockTags, mockRssFeeds, mockPersonalItems, saveFeedItems, saveRssFeeds, saveTags, savePersonalItems, getAllData, replaceAllData } from './mockData';
+import type { FeedItem, Tag, RssFeed, Attachment, PersonalItem, ExportData, AppData, Template } from '../types';
+import { mockFeedItems, mockTags, mockRssFeeds, mockPersonalItems, mockTemplates, saveFeedItems, saveRssFeeds, saveTags, savePersonalItems, saveTemplates, getAllData, replaceAllData } from './mockData';
 import { loadSettings, saveSettings } from './settingsService';
 
 // This is a placeholder for the API key which should be handled by the environment.
@@ -42,6 +42,18 @@ export const updateFeedItem = (id: string, updates: Partial<Pick<FeedItem, 'is_r
     });
 };
 
+export const markAllAsRead = (): Promise<void> => {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            mockFeedItems.forEach(item => {
+                item.is_read = true;
+            });
+            saveFeedItems();
+            resolve();
+        }, 300);
+    });
+};
+
 
 export const getTags = (): Promise<Tag[]> => {
   return new Promise(resolve => {
@@ -80,22 +92,22 @@ export const removeTag = (id: string): Promise<void> => {
     });
 };
 
-export const searchFeedItems = (query: string): Promise<FeedItem[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            if (!query) {
-                resolve([]);
-                return;
-            }
-            const lowerCaseQuery = query.toLowerCase();
-            const results = mockFeedItems.filter(item => 
-                item.title.toLowerCase().includes(lowerCaseQuery) ||
-                item.content.toLowerCase().includes(lowerCaseQuery) ||
-                (item.summary_ai || '').toLowerCase().includes(lowerCaseQuery) ||
-                item.tags.some(tag => tag.name.toLowerCase().includes(lowerCaseQuery))
-            );
-            resolve(results);
-        }, 300);
+export const searchFeedItems = (query: string, allItems: FeedItem[]): FeedItem[] => {
+    if (!query) {
+        return [];
+    }
+    const lowerCaseQuery = query.toLowerCase();
+    const queryTerms = lowerCaseQuery.split(' ').filter(term => term.length > 0);
+
+    return allItems.filter(item => {
+        const itemText = [
+            item.title,
+            item.content,
+            item.summary_ai || '',
+            ...item.tags.map(tag => tag.name)
+        ].join(' ').toLowerCase();
+
+        return queryTerms.every(term => itemText.includes(term));
     });
 };
 
@@ -128,18 +140,26 @@ export const getFeeds = (): Promise<RssFeed[]> => {
 export const addFeed = (url: string): Promise<RssFeed> => {
     return new Promise(resolve => {
         setTimeout(() => {
-            const urlObject = new URL(url);
-            let name = urlObject.hostname.replace(/^www\./, '');
-            name = name.charAt(0).toUpperCase() + name.slice(1);
+            try {
+              const urlObject = new URL(url);
+              let name = urlObject.hostname.replace(/^www\./, '');
+              name = name.charAt(0).toUpperCase() + name.slice(1);
 
-            const newFeed: RssFeed = {
-                id: `rss-${Date.now()}`,
-                url,
-                name,
-            };
-            mockRssFeeds.push(newFeed);
-            saveRssFeeds();
-            resolve(newFeed);
+              const newFeed: RssFeed = {
+                  id: `rss-${Date.now()}`,
+                  url,
+                  name,
+              };
+              mockRssFeeds.push(newFeed);
+              saveRssFeeds();
+              resolve(newFeed);
+            } catch (error) {
+              // A real implementation would parse the feed to get the title
+              const newFeed: RssFeed = { id: `rss-${Date.now()}`, url, name: "New Feed" };
+              mockRssFeeds.push(newFeed);
+              saveRssFeeds();
+              resolve(newFeed);
+            }
         }, 500);
     });
 };
@@ -204,13 +224,28 @@ export const updatePersonalItem = (id: string, updates: Partial<PersonalItem>): 
     });
 };
 
+export const removeFeedItem = (id: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            const index = mockFeedItems.findIndex(item => item.id === id);
+            if (index > -1) {
+                mockFeedItems.splice(index, 1);
+                saveFeedItems();
+                resolve();
+            } else {
+                reject(new Error("Feed item not found"));
+            }
+        }, 200);
+    });
+};
+
 export const removePersonalItem = (id: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            const index = mockPersonalItems.findIndex(item => item.id === id);
-            if (index > -1) {
-                mockPersonalItems.splice(index, 1);
-                savePersonalItems();
+            const initialLength = mockPersonalItems.length;
+            const updatedItems = mockPersonalItems.filter(item => item.id !== id);
+            if (updatedItems.length < initialLength) {
+                replaceAllData({ ...getAllData(), personalItems: updatedItems });
                 resolve();
             } else {
                 reject(new Error("Personal item not found"));
@@ -219,460 +254,286 @@ export const removePersonalItem = (id: string): Promise<void> => {
     });
 };
 
+// --- Template Management ---
+export const getTemplates = (): Promise<Template[]> => {
+    return new Promise(resolve => resolve([...mockTemplates]));
+};
 
-// --- LIVE RSS FETCHING ---
+export const addTemplate = (template: Omit<Template, 'id'>): Promise<Template> => {
+    return new Promise(resolve => {
+        const newTemplate: Template = { id: `template-${Date.now()}`, ...template };
+        mockTemplates.push(newTemplate);
+        saveTemplates();
+        resolve(newTemplate);
+    });
+};
 
-const getMockRssContent = (): { [key: string]: string } => ({
-    'https://www.calcalist.co.il/rss/calcalist,0,0,14,00.xml': `
-        <item>
-            <title>המדדים בת"א ננעלו בירידות; טבע ירדה ב-2%, נייס עלתה ב-1.5%</title>
-            <link>https://www.calcalist.co.il/stockmarket/article/rjx3l0kzr</link>
-            <pubDate>${new Date(Date.now() - 3 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>https://www.calcalist.co.il/stockmarket/article/rjx3l0kzr</guid>
-            <description>ת"א 35 ות"א 125 איבדו 0.4%, ת"א בנקים נחלש ב-0.2%. עוד ברקע למסחר: הממשלה אישרה את תקציב המדינה המתוקן לשנת 2024.</description>
-        </item>
-        <item>
-            <title>אינטל צפויה לקבל מענק של 11 מיליארד דולר להקמת מפעל שבבים באוהיו</title>
-            <link>https://www.calcalist.co.il/markets/article/r1b2faky0</link>
-            <pubDate>${new Date(Date.now() - 8 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>https://www.calcalist.co.il/markets/article/r1b2faky0</guid>
-            <description>ההשקעה במפעל החדש היא חלק מתוכנית כוללת של ממשל ביידן לתמוך בייצור שבבים מקומי בארה"ב, ולהפחית את התלות במזרח אסיה.</description>
-        </item>
-    `,
-    'https://www.darkreading.com/rss_simple.asp': `
-        <item>
-            <title>New 'GhostRace' Attack Bypasses CPU Speculative Execution Mitigations</title>
-            <link>https://www.darkreading.com/vulnerabilities-threats/new-ghostrace-attack-bypasses-cpu-speculative-execution-mitigations</link>
-            <pubDate>${new Date(Date.now() - 2 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>1449411</guid>
-            <description>Researchers discover a new side-channel attack that can leak sensitive data from modern CPUs, despite existing protections against Spectre and Meltdown.</description>
-        </item>
-        <item>
-            <title>CISA Warns of Actively Exploited Vulnerability in JetBrains TeamCity</title>
-            <link>https://www.darkreading.com/application-security/cisa-warns-of-actively-exploited-vulnerability-in-jetbrains-teamcity</link>
-            <pubDate>${new Date(Date.now() - 12 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>1449405</guid>
-            <description>The US cybersecurity agency has added CVE-2024-27198 to its Known Exploited Vulnerabilities catalog, urging organizations to patch their CI/CD servers immediately.</description>
-        </item>
-    `,
-    'https://www.psychologytoday.com/intl/en/front/feed': `
-       <item>
-            <title>The Surprising Power of Small Talk</title>
-            <link>https://www.psychologytoday.com/intl/en/articles/202403/the-surprising-power-of-small-talk</link>
-            <pubDate>${new Date(Date.now() - 6 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>https://www.psychologytoday.com/intl/en/node/1199331</guid>
-            <description>It may seem trivial, but brief, friendly interactions can have a significant positive impact on our well-being and sense of connection.</description>
-        </item>
-       <item>
-            <title>How to Stop Ruminating on Negative Thoughts</title>
-            <link>https://www.psychologytoday.com/intl/en/blog/mindful-musings/202403/how-to-stop-ruminating-on-negative-thoughts</link>
-            <pubDate>${new Date(Date.now() - 1 * 24 * 3600 * 1000).toUTCString()}</pubDate>
-            <guid>https://www.psychologytoday.com/intl/en/node/1199320</guid>
-            <description>Caught in a loop of negativity? Here are four practical, research-backed strategies to break the cycle of rumination and regain mental peace.</description>
-        </item>
-    `
-});
+export const removeTemplate = (id: string): Promise<void> => {
+    return new Promise(resolve => {
+        const index = mockTemplates.findIndex(t => t.id === id);
+        if (index > -1) {
+            mockTemplates.splice(index, 1);
+            saveTemplates();
+        }
+        resolve();
+    });
+};
 
-const fetchAndParseRssFeed = async (feed: RssFeed): Promise<FeedItem[]> => {
-    if (!API_KEY) throw new Error("API key not configured.");
-    const settings = loadSettings();
+// --- Data Management ---
 
-    const mockContent = getMockRssContent();
-    const rawContent = mockContent[feed.url];
+export const exportAllData = (): string => {
+    const data: ExportData = {
+        settings: loadSettings(),
+        data: getAllData(),
+        exportDate: new Date().toISOString(),
+        version: 1,
+    };
+    return JSON.stringify(data, null, 2);
+};
 
-    if (!rawContent) {
-        console.warn(`No mock RSS content for ${feed.name} (${feed.url}). This is a demo app and cannot fetch live URLs.`);
-        return [];
-    }
-    
+export const importAllData = (jsonData: string): void => {
     try {
-        const response = await ai.models.generateContent({
-            model: settings.aiModel,
-            contents: `Parse the following RSS feed content. For each item, extract the title, link, publication date (pubDate), a unique identifier (guid), and a plain text version of the description or content. Ensure the publication date is a valid ISO 8601 string. Return up to 10 recent items. \n\n RSS Content: \n ${rawContent}`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        items: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    link: { type: Type.STRING },
-                                    pubDate: { type: Type.STRING, description: 'The publication date in ISO 8601 format.' },
-                                    content: { type: Type.STRING, description: 'Plain text content or description.' },
-                                    guid: { type: Type.STRING, description: 'A unique identifier for the item.' }
-                                },
-                                required: ['title', 'link', 'pubDate', 'content', 'guid']
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        const rawText = response.text.trim();
-        const jsonText = rawText.startsWith('```json') ? rawText.substring(7, rawText.length - 3).trim() : rawText;
-        const data = JSON.parse(jsonText);
-
-        if (!data.items || data.items.length === 0) {
-            console.warn(`Feed "${feed.name}" returned no items from AI after parsing mock content.`);
-            return [];
+        const imported: ExportData = JSON.parse(jsonData);
+        if (!imported.version || !imported.data || !imported.settings) {
+            throw new Error("Invalid import file format.");
         }
-
-        return data.items.map((item: any): FeedItem => ({
-            id: `rss-${btoa(item.guid || item.link)}`,
-            type: 'rss',
-            title: item.title,
-            link: item.link,
-            content: item.content.substring(0, 1500), // Truncate content
-            is_read: false,
-            is_spark: false,
-            tags: [],
-            createdAt: new Date(item.pubDate).toISOString(),
-        }));
+        if (window.confirm("This will overwrite all existing data. Are you sure you want to continue?")) {
+            replaceAllData(imported.data);
+            saveSettings(imported.settings);
+            alert("Data imported successfully. The app will now reload.");
+            window.location.reload();
+        }
     } catch (error) {
-        console.error(`Error processing MOCK feed ${feed.name} with AI:`, error);
-        return [];
+        console.error("Failed to import data:", error);
+        alert("Failed to import data. Please check the file format.");
     }
 };
-
-
-export const refreshAllFeeds = async (): Promise<number> => {
-    const settings = loadSettings();
-    const allFeeds = await getFeeds();
-    
-    let newItems: FeedItem[] = [];
-    for (const feed of allFeeds) {
-        try {
-            const items = await fetchAndParseRssFeed(feed);
-            newItems = [...newItems, ...items];
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch(e) {
-            console.error(`Failed to process feed ${feed.name}`, e);
-        }
-    }
-    
-    const uniqueNewItems = newItems.flat();
-    const existingIds = new Set(mockFeedItems.map(item => item.id));
-    const trulyNewItems = uniqueNewItems.filter(item => !existingIds.has(item.id));
-
-    if (trulyNewItems.length > 0) {
-        if (settings.autoSummarize) {
-            console.log(`Auto-summarizing ${trulyNewItems.length} new items...`);
-            for (const item of trulyNewItems) {
-                try {
-                    item.summary_ai = await summarizeItemContent(item.content);
-                } catch (e) {
-                    console.error(`Failed to auto-summarize item: ${item.title}`, e);
-                }
-            }
-        }
-        mockFeedItems.unshift(...trulyNewItems);
-        saveFeedItems();
-    }
-    
-    return trulyNewItems.length;
-};
-
 
 // --- GEMINI API FUNCTIONS ---
 
+export const extractTextFromImage = async (base64ImageData: string, mimeType: string): Promise<string> => {
+    const imagePart = {
+        inlineData: {
+            data: base64ImageData,
+            mimeType: mimeType,
+        },
+    };
+    const textPart = {
+        text: 'Extract all text from this image, in its original language. Respond only with the extracted text.',
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: { parts: [imagePart, textPart] },
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error extracting text from image:", error);
+        throw new Error("Failed to extract text from image.");
+    }
+};
+
+
+export const performAiSearch = async (query: string, allItems: FeedItem[]): Promise<{ answer: string | null, itemIds: string[] }> => {
+    const settings = loadSettings();
+    const corpus = allItems.map(item => ({
+        id: item.id,
+        title: item.title,
+        content: item.summary_ai || item.content,
+        tags: item.tags.map(t => t.name),
+        type: item.type,
+        createdAt: item.createdAt
+    }));
+    
+    const prompt = `You are a powerful search and synthesis engine for a personal knowledge base app called "Spark".
+The user has provided a search query in Hebrew. Your task is to:
+1. Analyze the query to understand its intent (keyword search, question, filtering, request for synthesis, etc.).
+2. Search through the provided list of items (JSON format) to find the most relevant ones.
+3. If the query is a question or implies synthesis, generate a concise answer in Hebrew based on the content of the relevant items. Use Markdown for formatting.
+4. Return a JSON object with two keys:
+    - "answer": A string with the synthesized answer in Hebrew (Markdown formatted), or null if the query was not a question that required a synthesized answer.
+    - "itemIds": A JSON array of strings, containing the IDs of the most relevant items, sorted by relevance. Return up to 15 relevant IDs.
+
+User Query: "${query}"
+
+User's Items (Corpus):
+${JSON.stringify(corpus)}
+
+Respond ONLY with the JSON object.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        answer: { type: Type.STRING, nullable: true },
+                        itemIds: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    },
+                    required: ['answer', 'itemIds']
+                }
+            }
+        });
+        return JSON.parse(response.text);
+    } catch(e) {
+        console.error("Error in performAiSearch:", e);
+        throw new Error("AI search request failed.");
+    }
+};
+
+
 export const summarizeItemContent = async (content: string): Promise<string> => {
-  if (!API_KEY) throw new Error("API key not configured.");
-  const settings = loadSettings();
-  try {
-    const response = await ai.models.generateContent({
-      model: settings.aiModel,
-      contents: `Analyze the following text. Provide a concise summary in Hebrew. Then, generate 2-3 thought-provoking questions in Hebrew based on the text to encourage deeper thinking.
-      Text: "${content}"`,
-       config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                  summary: { type: Type.STRING, description: 'The concise summary in Hebrew.' },
-                  questions: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
-                      description: 'An array of 2-3 thought-provoking questions in Hebrew.'
-                  }
-              },
-              required: ["summary", "questions"]
-          }
-      }
-    });
-    const rawText = response.text.trim();
-    const jsonText = rawText.startsWith('```json') ? rawText.substring(7, rawText.length - 3).trim() : rawText;
-    const result = JSON.parse(jsonText);
-    const formattedSummary = `${result.summary}\n\n---\n\n*שאלות למחשבה:*\n${result.questions.map((q: string) => `- ${q}`).join('\n')}`;
-    return formattedSummary;
-  } catch (error) {
-    console.error("Error calling Gemini API for summarization:", error);
-    throw new Error("Failed to get summary from AI.");
-  }
+    const settings = loadSettings();
+    const prompt = `Summarize the following text in Hebrew into a concise paragraph. The summary should capture the main points and be easy to understand. Text to summarize:\n---\n${content}\n---\nSummary:`;
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error summarizing content:", error);
+        throw new Error("Failed to summarize content.");
+    }
 };
 
 export const autoTagContent = async (content: string, availableTags: Tag[]): Promise<string[]> => {
-    if (!API_KEY) throw new Error("API key not configured.");
-    if (availableTags.length === 0) return [];
     const settings = loadSettings();
-    const tagNames = availableTags.map(t => t.name);
+    const tagList = availableTags.map(tag => `"${tag.name}"`).join(', ');
 
+    const prompt = `Analyze the following text and select up to 3 of the most relevant tags from the provided list. Return the result as a JSON array of tag names.\nAvailable tags: [${tagList}]\n\nText to analyze:\n---\n${content}\n---\n\nRelevant tags (JSON array):`;
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
-            contents: `Given the following text and a list of available tags, identify which tags apply.
-            Text: "${content}"
-            Available Tags: ${tagNames.join(', ')}`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        tags: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.STRING,
-                                description: 'An applicable tag from the provided list.'
-                            }
-                        }
-                    }
-                }
-            }
+            contents: prompt,
         });
-        
-        const rawText = response.text.trim();
-        const jsonText = rawText.startsWith('```json') ? rawText.substring(7, rawText.length - 3).trim() : rawText;
-        const jsonResponse = JSON.parse(jsonText);
-        const matchedTagNames: string[] = jsonResponse.tags || [];
-        
-        const matchedTagIds = availableTags
-            .filter(tag => matchedTagNames.includes(tag.name))
+        let responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const suggestedTagNames: string[] = JSON.parse(responseText);
+        return availableTags
+            .filter(tag => suggestedTagNames.includes(tag.name))
             .map(tag => tag.id);
-
-        return matchedTagIds;
-
     } catch (error) {
-        console.error("Error calling Gemini API for auto-tagging:", error);
-        throw new Error("Failed to get auto-tags from AI.");
+        console.error("Error auto-tagging content:", error);
+        throw new Error("Failed to auto-tag content.");
     }
 };
 
-export const getUrlMetadata = async (url: string, availableTags: Tag[]): Promise<Partial<PersonalItem>> => {
-    if (!API_KEY) throw new Error("API key not configured.");
-    const settings = loadSettings();
-    const mockContentForAnalysis = `This is mock content for the URL ${url}. In a real application, this content would be scraped from the web page. For this demo, let's assume this page is about the future of Artificial Intelligence and its impact on user interface design. It discusses how AI can create more intuitive and personalized experiences. Key concepts include generative UI, predictive interactions, and ethical design principles in AI. The main image on the page is a futuristic abstract of a brain-computer interface.`;
-    
-    const tagNames = availableTags.map(t => t.name);
+export const refreshAllFeeds = async (): Promise<void> => {
+    // This is a mock function as fetching and parsing RSS is complex.
+    return new Promise(resolve => {
+        setTimeout(async () => {
+            const newRssItem: FeedItem = {
+                id: `rss-${Date.now()}`,
+                type: 'rss',
+                title: 'כתבה חדשה מרענון פיד (דמו)',
+                link: 'https://example.com',
+                content: 'זוהי כתבה חדשה שנוספה באופן אוטומטי בעת רענון הפידים. התוכן שלה מדבר על ההתפתחויות האחרונות בעולם הטכנולוגיה והבינה המלאכותית.',
+                is_read: false,
+                is_spark: false,
+                tags: [],
+                createdAt: new Date().toISOString(),
+            };
+            mockFeedItems.unshift(newRssItem);
 
-    try {
-        const response = await ai.models.generateContent({
-            model: settings.aiModel,
-            contents: `Analyze the content of the webpage at the URL "${url}". Based on the following mock content, extract a concise title, a one-paragraph summary in Hebrew, and suggest up to 3 relevant tags from the provided list.
-            
-            Mock Content: "${mockContentForAnalysis}"
-            Available Tags: ${tagNames.join(', ')}`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        summary: { type: Type.STRING, description: "A summary in Hebrew." },
-                        tags: {
-                            type: Type.ARRAY,
-                            items: { type: Type.STRING, description: "A relevant tag from the list." }
-                        },
-                        imageUrl: { type: Type.STRING, description: "A representative image URL from the page."}
-                    },
-                    required: ["title", "summary", "tags", "imageUrl"]
+            if (loadSettings().autoSummarize) {
+                try {
+                    const summary = await summarizeItemContent(newRssItem.content);
+                    await updateFeedItem(newRssItem.id, { summary_ai: summary });
+                } catch (error) {
+                    console.error("Auto-summarization failed for new item", error);
                 }
             }
-        });
-        
-        const rawText = response.text.trim();
-        const jsonText = rawText.startsWith('```json') ? rawText.substring(7, rawText.length - 3).trim() : rawText;
-        const result = JSON.parse(jsonText);
-
-        const domain = new URL(url).hostname.replace(/^www\./, '');
-        const matchedTagIds = availableTags.filter(tag => result.tags.includes(tag.name)).map(tag => tag.id);
-
-        return {
-            title: result.title,
-            content: result.summary,
-            domain: domain,
-            imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1170&q=80", // Mocked image
-            metadata: {
-                suggestedTags: matchedTagIds
-            }
-        };
-
-    } catch (error) {
-        console.error("Error analyzing URL with Gemini:", error);
-        throw new Error("Failed to analyze URL.");
-    }
-};
-
-export const getContentFromUrl = async (url: string): Promise<{ title: string, content: string }> => {
-    console.log(`Simulating fetch for URL: ${url}`);
-    // This is a mocked implementation because client-side JS cannot reliably fetch
-    // content from arbitrary URLs due to CORS restrictions.
-    if (url.includes('wikipedia.org')) {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                resolve({
-                    title: "בינה מלאכותית – ויקיפדיה",
-                    content: "בינה מלאכותית (באנגלית: Artificial intelligence, בראשי תיבות: AI) היא ענף של מדעי המחשב העוסק ביכולתם של מחשבים לפעול באופן המציג יכולות אנושיות. יכולות אלו כוללות למידה, הסקת מסקנות, פתרון בעיות, הבנת שפה טבעית וראייה ממוחשבת. המונח 'בינה מלאכותית' נטבע על ידי ג'ון מקארתי בשנת 1956."
-                });
-            }, 1000);
-        });
-    }
-
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve({
-                title: "תוכן מדומיין מהכתובת",
-                content: `זהו תוכן שנוצר באופן מדומיין עבור הכתובת ${url}. במערכת אמיתית, התוכן היה מיובא מהרשת ומסוכם על ידי בינה מלאכותית. פיצ'ר זה מיועד להדגמה בלבד.`
-            });
+            saveFeedItems();
+            resolve();
         }, 1000);
     });
 };
 
-export const findRelatedItems = async (currentItem: FeedItem, allItems: FeedItem[]): Promise<FeedItem[]> => {
-    if (!API_KEY) return [];
+export const synthesizeContent = async (itemsToSynthesize: FeedItem[]): Promise<string> => {
     const settings = loadSettings();
-    const otherItems = allItems.filter(item => item.id !== currentItem.id);
-    if (otherItems.length < 3) return [];
-
-    const contextItems = otherItems.map(item => ({ id: item.id, title: item.title, summary: item.summary_ai || item.content.substring(0, 150) }));
-
+    let contentToProcess = "";
+    itemsToSynthesize.forEach(item => {
+        contentToProcess += `--- ITEM START ---\nTitle: ${item.title}\nContent: ${item.summary_ai || item.content}\n--- ITEM END ---\n\n`;
+    });
+    const prompt = `You are a helpful AI assistant. Your task is to synthesize the following articles and notes into a coherent summary. Identify the main themes, connections, and key takeaways. Present the output in Hebrew using Markdown for clear formatting.\n\nHere is the content to synthesize:\n${contentToProcess}\n\nPlease provide a structured synthesis.`;
     try {
-        const response = await ai.models.generateContent({
-            model: settings.aiModel === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
-            contents: `Here is a main item and a list of other items. Find up to 3 items from the list that are most semantically related to the main item.
-            Main Item:
-            Title: ${currentItem.title}
-            Content: ${currentItem.summary_ai || currentItem.content.substring(0, 200)}
-
-            List of other items (JSON format):
-            ${JSON.stringify(contextItems)}
-            `,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        related_items: {
-                            type: Type.ARRAY,
-                            description: "An array of IDs of the most related items.",
-                            items: { type: Type.STRING }
-                        }
-                    },
-                    required: ['related_items']
-                }
-            }
-        });
-        const rawText = response.text.trim();
-        const jsonText = rawText.startsWith('```json') ? rawText.substring(7, rawText.length - 3).trim() : rawText;
-        const result = JSON.parse(jsonText);
-        const relatedIds: string[] = result.related_items || [];
-        
-        return allItems.filter(item => relatedIds.includes(item.id)).slice(0, 3);
+        const response = await ai.models.generateContent({ model: settings.aiModel, contents: prompt });
+        return response.text;
     } catch (error) {
-        console.error("Error finding related items:", error);
-        return [];
+        console.error("Error synthesizing content:", error);
+        throw new Error("Failed to synthesize content.");
     }
 };
 
-export const synthesizeContent = async (itemsToSynthesize: FeedItem[]): Promise<string> => {
-    if (!API_KEY) throw new Error("API key not configured.");
-    if (itemsToSynthesize.length === 0) return "No items to synthesize.";
+export const findRelatedItems = async (currentItem: FeedItem, allItems: FeedItem[]): Promise<FeedItem[]> => {
     const settings = loadSettings();
-    const contentForSynthesis = itemsToSynthesize.map(item => ({
-        title: item.title,
-        summary: item.summary_ai || item.content.substring(0, 200)
-    }));
+    const searchCorpus = allItems.filter(item => item.id !== currentItem.id);
+    if (searchCorpus.length === 0) return [];
 
+    const corpusForPrompt = searchCorpus.map(item => ({ id: item.id, title: item.title, summary: item.summary_ai || item.content.substring(0, 150) + '...' }));
+    const prompt = `From the following list of items, identify the 3 most relevant items related to the "Current Item".\n\nCurrent Item:\nID: ${currentItem.id}\nTitle: ${currentItem.title}\nSummary: ${currentItem.summary_ai || currentItem.content.substring(0, 200) + '...'}\n\nList of items to search from:\n${JSON.stringify(corpusForPrompt, null, 2)}\n\nReturn your answer as a JSON array of strings, where each string is the ID of a relevant item. For example: ["id1", "id2", "id3"]. Only return the JSON array.`;
+
+    try {
+        const response = await ai.models.generateContent({ model: settings.aiModel, contents: prompt });
+        const responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const relatedIds: string[] = JSON.parse(responseText);
+        return relatedIds.map(id => allItems.find(item => item.id === id)).filter((item): item is FeedItem => !!item);
+    } catch (error) {
+        console.error("Error finding related items:", error);
+        return []; // Return empty array on failure
+    }
+};
+
+export const createAssistantChat = (allItems: FeedItem[]): Chat => {
+    const settings = loadSettings();
+    const context = `You are "Sparky", a personal AI assistant in the "Spark" app. Help the user analyze and connect insights from their collected items. Be helpful and insightful. Respond in Hebrew.\n\nHere is the user's collection:\n${JSON.stringify(allItems.map(item => ({ id: item.id, type: item.type, title: item.title, summary: item.summary_ai || item.content.substring(0, 200), tags: item.tags.map(t => t.name) })), null, 2)}\n\nStart by introducing yourself and suggest a question, e.g., "מה הקשר בין הפריטים האחרונים שלי?" or "סכם לי את המאמרים בנושא AI".`;
+    return ai.chats.create({ model: settings.aiModel, history: [{ role: 'user', parts: [{ text: context }] }] });
+};
+
+export const getContentFromUrl = async (url: string): Promise<{ title: string, content: string }> => {
+    const settings = loadSettings();
+    const prompt = `Please fetch the main content from the URL: ${url}. Provide the article's original title and a concise summary of the content. Return a JSON object with keys: "title" and "content".`;
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
-            contents: `Synthesize the following collection of items into a coherent analysis in Hebrew. Identify the main themes, connections, and overarching trends. Use Markdown for formatting (e.g., # for title, ### for sub-headers, * for bullet points).
-            
-            Items to analyze:
-            ${JSON.stringify(contentForSynthesis)}
-            `,
-             config: {
-                ...(settings.aiModel === 'gemini-2.5-pro' && { thinkingConfig: { thinkingBudget: 32768 } })
-            }
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, content: { type: Type.STRING } }, required: ['title', 'content'] }
+            },
         });
-
-        return response.text.trim();
+        return JSON.parse(response.text);
     } catch (error) {
-        console.error("Error synthesizing content:", error);
-        throw new Error("Failed to synthesize content with AI.");
+        console.error("Error getting content from URL:", error);
+        throw new Error("Failed to fetch and summarize content from the URL.");
     }
 };
 
-export const createAssistantChat = (contextItems: FeedItem[]): Chat => {
+export const getUrlMetadata = async (url: string, allTags: Tag[]): Promise<Partial<PersonalItem>> => {
     const settings = loadSettings();
-    const context = `This is the user's current knowledge base. Use it to answer their questions:\n${JSON.stringify(contextItems.map(i => ({title: i.title, summary: i.summary_ai || i.content.slice(0, 150), tags: i.tags.map(t=>t.name)})))}`;
-    
-    const systemInstruction = `You are a personal knowledge assistant named 'Sparky'. Your purpose is to help the user explore and understand their saved data, which consists of personal notes ('sparks') and articles.
-    - Your knowledge is strictly limited to the data provided in the context.
-    - When asked a question, you must base your answer only on the provided items.
-    - If the answer isn't in the data, state clearly that you don't have information on that topic based on the user's sparks and feeds.
-    - Respond exclusively in Hebrew.
-    - Keep your answers concise and helpful.
-    - You can use Markdown for formatting your response.`;
-
-    const chat = ai.chats.create({
-        model: settings.aiModel,
-        config: {
-            systemInstruction,
-        },
-        history: [
-            { role: 'user', parts: [{ text: context }] },
-            { role: 'model', parts: [{ text: 'בסדר, הבנתי. אני היועץ האישי שלך, Sparky. מאגר הידע שלי מבוסס על הספארקים והפידים ששמרת. איך אני יכול לעזור לך היום?' }] }
-        ]
-    });
-    return chat;
-};
-
-
-// --- DATA MANAGEMENT ---
-
-export const exportAllData = (): string => {
-    const settings = loadSettings();
-    const data = getAllData();
-
-    const exportObject: ExportData = {
-        settings,
-        data,
-        exportDate: new Date().toISOString(),
-        version: 2.2, // Current version
-    };
-    return JSON.stringify(exportObject, null, 2);
-};
-
-export const importAllData = (jsonString: string): void => {
+    const tagList = allTags.map(t => t.name).join(', ');
+    const prompt = `Analyze the webpage at URL: ${url}. Extract: title, a one-paragraph summary (for 'content'), a direct URL to a relevant image ('imageUrl'), the root domain ('domain'), and suggest up to 3 relevant tags from this list: [${tagList}]. Return a JSON object with keys: "title", "content", "imageUrl", "domain", "suggestedTags" (an array of strings).`;
     try {
-        const importObject: ExportData = JSON.parse(jsonString);
-        
-        if (!importObject.settings || !importObject.data || !importObject.version) {
-            throw new Error("Invalid import file format.");
-        }
-
-        saveSettings(importObject.settings);
-        replaceAllData(importObject.data);
-        
-        alert("הנתונים יובאו בהצלחה! האפליקציה תיטען מחדש כעת.");
-        window.location.reload();
-
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: { title: { type: Type.STRING }, content: { type: Type.STRING }, imageUrl: { type: Type.STRING }, domain: { type: Type.STRING }, suggestedTags: { type: Type.ARRAY, items: { type: Type.STRING } } },
+                    required: ['title', 'content', 'imageUrl', 'domain', 'suggestedTags']
+                }
+            },
+        });
+        const result = JSON.parse(response.text);
+        return { title: result.title, content: result.content, imageUrl: result.imageUrl, domain: result.domain, metadata: { suggestedTags: result.suggestedTags } };
     } catch (error) {
-        console.error("Failed to import data:", error);
-        alert(`שגיאה בייבוא הנתונים: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+        console.error("Error getting URL metadata:", error);
+        throw new Error("Failed to fetch metadata from the URL.");
     }
 };
