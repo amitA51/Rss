@@ -1,97 +1,140 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { FeedIcon, AddIcon, SearchIcon, SettingsIcon, LayoutDashboardIcon } from './icons';
+import React, { useMemo, useContext, useCallback } from 'react';
+import { FeedIcon, AddIcon, TargetIcon, LayoutDashboardIcon, ChartBarIcon, SearchIcon, SettingsIcon } from './icons';
+import type { Screen } from '../types';
+import { AppContext } from '../state/AppContext';
 
-type Screen = 'feed' | 'add' | 'search' | 'settings' | 'home';
-
-interface BottomNavBarProps {
-  activeScreen: Screen;
-  setActiveScreen: (screen: Screen) => void;
-}
-
-const NavItem: React.FC<{
+interface NavItemProps {
   label: string;
   icon: React.ReactNode;
   isActive: boolean;
   onClick: () => void;
-  itemRef: React.RefObject<HTMLButtonElement>;
-}> = ({ label, icon, isActive, onClick, itemRef }) => (
-  <button
-    ref={itemRef}
-    onClick={onClick}
-    className={`relative z-10 flex flex-col items-center justify-center w-full h-full transition-colors duration-300 group ${
-      isActive ? 'text-white' : 'text-gray-400 hover:text-white'
-    }`}
-    aria-label={label}
-  >
-    <div className="transition-transform duration-300 transform-gpu group-hover:-translate-y-1 group-hover:scale-110 group-active:scale-95">
-      {icon}
-    </div>
-    <span className={`text-xs mt-1 transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{label}</span>
-  </button>
-);
+  onContextMenu?: (e: React.MouseEvent) => void;
+  isCenter?: boolean;
+}
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeScreen, setActiveScreen }) => {
-  const [indicatorStyle, setIndicatorStyle] = useState({});
-  const navRef = useRef<HTMLElement>(null);
-  const itemRefs = useRef<{[key: string]: React.RefObject<HTMLButtonElement>}>({});
+const NavItem: React.FC<NavItemProps> = ({ label, icon, isActive, onClick, onContextMenu, isCenter }) => {
+  const iconClasses = `h-6 w-6 transition-all duration-300 ${
+    isActive && !isCenter ? 'text-[var(--dynamic-accent-start)]' : 
+    isCenter ? 'text-white' : 
+    'text-[var(--text-secondary)] group-hover:text-white'
+  }`;
 
-  const navItems = [
-    { id: 'feed', label: 'פיד', icon: <FeedIcon className="h-6 w-6" /> },
-    { id: 'search', label: 'חיפוש', icon: <SearchIcon className="h-6 w-6" /> },
-    { id: 'add', label: 'הוספה', icon: <AddIcon className="h-7 w-7" /> },
-    { id: 'home', label: 'בית', icon: <LayoutDashboardIcon className="h-6 w-6" /> },
-    { id: 'settings', label: 'הגדרות', icon: <SettingsIcon className="h-6 w-6" /> },
-  ] as const;
+  const finalIcon = React.isValidElement<{ className?: string }>(icon)
+      ? React.cloneElement(icon, { className: iconClasses })
+      : icon;
 
-  navItems.forEach(item => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    itemRefs.current[item.id] = useRef<HTMLButtonElement>(null);
-  });
+  return (
+    <button
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+      className={`relative flex flex-col items-center justify-center h-16 transition-all duration-300 group ${isCenter ? 'w-20' : 'w-16'}`}
+      aria-label={label}
+    >
+      <div 
+        className={`absolute transition-all duration-300 ${
+          isCenter 
+            ? `w-16 h-16 rounded-full bottom-6 shadow-lg shadow-black/30 border-2 border-[var(--bg-primary)] ${isActive ? 'bg-[var(--accent-gradient)] shadow-[0_0_15px_var(--dynamic-accent-glow)]' : 'bg-[var(--bg-card)]'}`
+            : ''
+        }`}
+      ></div>
+      <div className={`relative transition-transform duration-300 transform-gpu group-active:scale-90 ${isCenter ? 'mt-3' : ''} ${isActive && !isCenter ? 'scale-110 -translate-y-2' : 'group-hover:-translate-y-1'}`}>
+        {finalIcon}
+      </div>
+      <span 
+        className={`text-xs mt-1 font-bold transition-all duration-300 
+        ${isActive && !isCenter ? 'text-[var(--dynamic-accent-highlight)] opacity-100 themed-glow-text' : 'text-[var(--text-secondary)] opacity-60 group-hover:text-white group-hover:opacity-100'}`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+};
 
-  useEffect(() => {
-    const activeItemRef = itemRefs.current[activeScreen];
-    if (activeItemRef?.current && navRef.current) {
-      const navRect = navRef.current.getBoundingClientRect();
-      const itemRect = activeItemRef.current.getBoundingClientRect();
-      
-      setIndicatorStyle({
-        width: `${itemRect.width * 0.7}px`,
-        height: `calc(${itemRect.height}px - 2.5rem)`,
-        left: `${itemRect.left - navRect.left + (itemRect.width * 0.15)}px`,
-        top: '0.5rem',
-      });
+const allNavItems: Record<Screen, { label: string; icon: React.ReactNode }> = {
+    feed: { label: 'פיד', icon: <FeedIcon /> },
+    today: { label: 'היום', icon: <TargetIcon /> },
+    add: { label: 'הוספה', icon: <AddIcon className="h-7 w-7" /> },
+    library: { label: 'המתכנן', icon: <LayoutDashboardIcon /> },
+    investments: { label: 'השקעות', icon: <ChartBarIcon /> },
+    search: { label: 'חיפוש', icon: <SearchIcon /> },
+    settings: { label: 'הגדרות', icon: <SettingsIcon /> },
+};
+
+
+const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: Screen) => void }> = ({ activeScreen, setActiveScreen }) => {
+  const { state } = useContext(AppContext);
+  const { settings } = state;
+  const { screenLabels, navBarLayout } = settings;
+
+  // FIX: Encapsulate event handlers in useCallback to stabilize their identity
+  // and prevent unnecessary re-renders, and include them in the useMemo dependency array.
+  const handleLongPressAdd = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const lastType = settings.lastAddedType;
+    if (lastType) {
+      sessionStorage.setItem('preselect_add', lastType);
+      setActiveScreen('add');
+       if (window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
     }
-  }, [activeScreen]);
+  }, [settings.lastAddedType, setActiveScreen]);
+
+  const handleAddItemClick = useCallback(() => {
+    if (activeScreen === 'investments') {
+        sessionStorage.setItem('preselect_add', 'ticker');
+    } else if (activeScreen === 'feed') {
+        sessionStorage.setItem('preselect_add', 'spark');
+    }
+    setActiveScreen('add');
+  }, [activeScreen, setActiveScreen]);
+  
+  const navItems = useMemo(() => {
+    const layout = [...navBarLayout];
+    const addIndex = layout.indexOf('add');
+    if (addIndex !== -1 && addIndex !== 2) {
+      layout.splice(addIndex, 1);
+      layout.splice(2, 0, 'add');
+    }
+
+    return layout.slice(0, 5).map((screenId, index) => {
+      const item = allNavItems[screenId];
+      // FIX: Corrected a runtime error where `item.id` was accessed. The `item` object from `allNavItems`
+      // does not have an `id` property. The check should be against `screenId`.
+      const isCenterButton = index === 2 && screenId === 'add';
+
+      return {
+        id: screenId,
+        label: screenLabels[screenId] || item.label,
+        icon: item.icon,
+        isCenter: isCenterButton,
+        onClick: isCenterButton ? handleAddItemClick : () => setActiveScreen(screenId),
+        onContextMenu: isCenterButton ? handleLongPressAdd : undefined,
+      }
+    });
+  }, [navBarLayout, screenLabels, setActiveScreen, handleAddItemClick, handleLongPressAdd]);
+
+  const navClasses = `fixed bottom-0 right-0 left-0 h-20 bg-transparent z-30 ${settings.themeSettings.cardStyle === 'glass' ? 'glass-nav' : 'bg-[var(--bg-primary)]/80 backdrop-blur-lg border-t border-[var(--border-primary)]'}`;
 
   return (
     <>
       <nav 
-        ref={navRef}
-        className="fixed bottom-0 right-0 left-0 h-20 bg-gradient-to-t from-black/80 via-black/70 to-black/60 backdrop-blur-lg border-t border-gray-700/50"
+        className={navClasses}
       >
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
-        <div className="flex justify-around max-w-md mx-auto relative h-full">
-          <div 
-            className="absolute bg-blue-600/50 rounded-2xl transition-all duration-500 ease-in-out-back"
-            style={indicatorStyle}
-          ></div>
+        <div className="flex justify-around max-w-md mx-auto relative h-full items-center">
           {navItems.map((item) => (
-            <NavItem
-              key={item.id}
-              label={item.label}
-              icon={item.icon}
-              isActive={activeScreen === item.id}
-              onClick={() => setActiveScreen(item.id)}
-              itemRef={itemRefs.current[item.id]}
-            />
+              <NavItem
+                key={item.id}
+                label={item.label}
+                icon={item.icon}
+                isActive={activeScreen === item.id}
+                onClick={item.onClick}
+                onContextMenu={item.onContextMenu}
+                isCenter={item.isCenter}
+              />
           ))}
         </div>
       </nav>
-      <style>{`
-        .ease-in-out-back {
-          transition-timing-function: cubic-bezier(0.68, -0.6, 0.32, 1.6);
-        }
-      `}</style>
     </>
   );
 };

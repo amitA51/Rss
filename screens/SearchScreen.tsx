@@ -1,11 +1,18 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import type { FeedItem } from '../types';
-import { getAllItems, updateFeedItem, summarizeItemContent, performAiSearch, searchFeedItems, removeFeedItem } from '../services/geminiService';
+import type { Screen } from '../types';
+import { summarizeItemContent, performAiSearch } from '../services/geminiService';
+// FIX: Import reAddFeedItem for the undo functionality.
+import { updateFeedItem, removeFeedItem, convertFeedItemToPersonalItem, reAddFeedItem } from '../services/dataService';
 import FeedCardV2 from '../components/FeedCardV2';
 import ItemDetailModal from '../components/ItemDetailModal';
 import ContextMenu from '../components/ContextMenu';
 import MarkdownRenderer from '../components/MarkdownRenderer';
-import { SearchIcon, SparklesIcon } from '../components/icons';
+import { SearchIcon, SparklesIcon, SettingsIcon } from '../components/icons';
+import { useDebounce } from '../hooks/useDebounce';
+import { AppContext } from '../state/AppContext';
+import { useContextMenu } from '../hooks/useContextMenu';
+import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
 
 type FilterType = 'all' | 'spark' | 'rss';
 type FilterStatus = 'all' | 'read' | 'unread';
@@ -15,10 +22,8 @@ interface SearchFilters {
     status: FilterStatus;
 }
 
-interface ContextMenuState {
-  x: number;
-  y: number;
-  item: FeedItem;
+interface SearchScreenProps {
+    setActiveScreen: (screen: Screen) => void;
 }
 
 const FilterChip: React.FC<{
@@ -28,10 +33,10 @@ const FilterChip: React.FC<{
 }> = ({ label, isActive, onClick }) => (
     <button
         onClick={onClick}
-        className={`px-4 py-1.5 text-sm rounded-full transition-all shrink-0 transform hover:scale-105 active:scale-95 font-semibold ${
+        className={`px-4 py-2 text-sm rounded-full transition-all shrink-0 transform hover:scale-105 active:scale-95 font-medium ${
             isActive 
-            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' 
-            : 'bg-gray-800/70 text-gray-300 hover:bg-gray-700'
+            ? 'bg-[var(--accent-gradient)] text-white shadow-[0_0_15px_var(--dynamic-accent-glow)]' 
+            : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white'
         }`}
     >
         {label}
@@ -39,9 +44,13 @@ const FilterChip: React.FC<{
 );
 
 
-const SearchScreen: React.FC = () => {
+export default function SearchScreen({ setActiveScreen }: SearchScreenProps) {
+    const { state, dispatch } = useContext(AppContext);
+    const { feedItems, settings } = state;
+    const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<FeedItem>();
+
     const [query, setQuery] = useState('');
-    const [allItems, setAllItems] = useState<FeedItem[]>([]);
+    const debouncedQuery = useDebounce(query, 300);
     const [searchResults, setSearchResults] = useState<FeedItem[]>([]);
     const [isAiSearch, setIsAiSearch] = useState(false);
     
@@ -52,31 +61,40 @@ const SearchScreen: React.FC = () => {
 
     const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
     const [isSummarizing, setIsSummarizing] = useState<string | null>(null);
-    const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: ()=>void} | null>(null);
+
+    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
+        setStatusMessage({ type, text, id: Date.now(), onUndo });
+    };
+
+    const handleSelectItem = (item: FeedItem, event: React.MouseEvent) => {
+        event.stopPropagation();
+        setSelectedItem(item);
+    };
 
     useEffect(() => {
-        getAllItems().then(setAllItems);
-    }, []);
-
-    useEffect(() => {
-        if (query.length > 1) {
-            const results = searchFeedItems(query, allItems);
+        if (debouncedQuery.length > 1) {
+            const lowerCaseQuery = debouncedQuery.toLowerCase();
+            const results = feedItems.filter(item => 
+                item.title.toLowerCase().includes(lowerCaseQuery) ||
+                item.content.toLowerCase().includes(lowerCaseQuery)
+            );
             setSearchResults(results);
             setIsAiSearch(false);
             setAiAnswer(null);
         } else {
             setSearchResults([]);
         }
-    }, [query, allItems]);
+    }, [debouncedQuery, feedItems]);
     
     const handleAiSearch = async () => {
         if (!query || isAiLoading) return;
         setIsAiLoading(true);
         setAiAnswer(null);
         try {
-            const result = await performAiSearch(query, allItems);
+            const result = await performAiSearch(query, feedItems);
             setAiAnswer(result.answer);
-            const resultItems = allItems.filter(item => result.itemIds.includes(item.id));
+            const resultItems = feedItems.filter(item => result.itemIds.includes(item.id));
             setSearchResults(resultItems);
             setIsAiSearch(true);
         } catch(e) {
@@ -96,78 +114,96 @@ const SearchScreen: React.FC = () => {
         });
     }, [searchResults, filters]);
 
-    const handleToggleRead = useCallback(async (id: string) => {
-        const item = allItems.find(i => i.id === id);
-        if (!item) return;
-        const newStatus = !item.is_read;
-        const updatedItem = { ...item, is_read: newStatus };
+    const handleUpdateItem = useCallback(async (id: string, updates: Partial<FeedItem>) => {
+        const originalItem = feedItems.find(item => item.id === id);
+        if (!originalItem) return;
 
-        setAllItems(prev => prev.map(i => i.id === id ? updatedItem : i));
-        setSearchResults(prev => prev.map(i => i.id === id ? updatedItem : i));
-        if (selectedItem?.id === id) setSelectedItem(updatedItem);
+        // Optimistic UI update
+        dispatch({ type: 'UPDATE_FEED_ITEM', payload: { id, updates } });
+        setSearchResults(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+        if (selectedItem?.id === id) {
+            setSelectedItem(prev => prev ? { ...prev, ...updates } : null);
+        }
 
         try {
-            await updateFeedItem(id, { is_read: newStatus });
+            await updateFeedItem(id, updates);
         } catch (error) {
-            console.error("Failed to update read status:", error);
-            setAllItems(prev => prev.map(i => i.id === id ? item : i));
-            setSearchResults(prev => prev.map(i => i.id === id ? item : i));
+            console.error("Failed to update item:", error);
+            // Rollback on failure
+            dispatch({ type: 'UPDATE_FEED_ITEM', payload: { id, updates: originalItem } });
+            setSearchResults(prev => prev.map(item => item.id === id ? originalItem : item));
+            if (selectedItem?.id === id) {
+                setSelectedItem(originalItem);
+            }
+            showStatus('error', 'שגיאה בעדכון הפריט.');
         }
-    }, [allItems, selectedItem]);
+    }, [dispatch, feedItems, selectedItem]);
+
+    const handleToggleRead = useCallback((id: string, forceStatus?: boolean) => {
+        const item = feedItems.find(i => i.id === id);
+        if (!item) return;
+        const newStatus = forceStatus !== undefined ? forceStatus : !item.is_read;
+        handleUpdateItem(id, { is_read: newStatus });
+    }, [feedItems, handleUpdateItem]);
 
     const handleSummarize = useCallback(async (itemToSummarize: FeedItem) => {
         if (isSummarizing) return;
         setIsSummarizing(itemToSummarize.id);
         try {
             const summary = await summarizeItemContent(itemToSummarize.content);
-            const updatedItem = { ...itemToSummarize, summary_ai: summary };
-            
-            setAllItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
-            setSearchResults(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
-            if (selectedItem?.id === updatedItem.id) setSelectedItem(updatedItem);
-
-            await updateFeedItem(itemToSummarize.id, { summary_ai: summary });
+            await handleUpdateItem(itemToSummarize.id, { summary_ai: summary });
         } catch (error) {
             console.error("Failed to summarize:", error);
+            showStatus('error', 'שגיאה בסיכום הפריט.');
         } finally {
             setIsSummarizing(null);
         }
-    }, [isSummarizing, selectedItem]);
+    }, [isSummarizing, handleUpdateItem]);
     
     const handleDeleteItem = useCallback(async (id: string) => {
-      if (window.confirm("האם למחוק את הספארק?")) {
-        setAllItems(prev => prev.filter(i => i.id !== id));
-        setSearchResults(prev => prev.filter(i => i.id !== id));
-        try {
-            await removeFeedItem(id);
-        } catch(e) {
-            alert("שגיאה במחיקת הספארק. משחזר...");
-            getAllItems().then(setAllItems);
-        }
-      }
-    }, []);
+        const itemToDelete = feedItems.find(item => item.id === id);
+        if (!itemToDelete) return;
 
-    const handleContextMenu = (e: React.MouseEvent, item: FeedItem) => {
-        e.preventDefault();
-        setContextMenu({ x: e.clientX, y: e.clientY, item });
-    };
+        if (window.navigator.vibrate) window.navigator.vibrate(50);
+        
+        await removeFeedItem(id);
+        dispatch({ type: 'REMOVE_FEED_ITEM', payload: id });
+
+        showStatus('success', 'הפריט נמחק.', async () => {
+            // FIX: Added `await` to the async undo action to ensure it completes before potential subsequent actions.
+            await reAddFeedItem(itemToDelete);
+            dispatch({ type: 'ADD_FEED_ITEM', payload: itemToDelete });
+        });
+    }, [dispatch, feedItems]);
     
+    const handleAddToLibrary = useCallback(async (item: FeedItem) => {
+        try {
+            const newPersonalItem = await convertFeedItemToPersonalItem(item);
+            dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newPersonalItem });
+            await handleToggleRead(item.id, true); // Also mark as read
+            showStatus('success', 'הפריט הוסף לספרייה');
+        } catch (error) {
+            console.error("Failed to add to library:", error);
+            showStatus('error', 'שגיאה בהוספה לספרייה');
+        }
+    }, [dispatch, handleToggleRead]);
+
     const ResultSection: React.FC<{title: string, items: FeedItem[]}> = ({ title, items }) => {
         if (items.length === 0) return null;
         return (
             <section>
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">{title}</h2>
-                <div className="space-y-4">
+                <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 px-1">{title}</h2>
+                <div className="space-y-3">
                     {items.map((item, index) => (
                          <FeedCardV2
                             key={item.id}
                             item={item}
                             index={index}
-                            onSelect={setSelectedItem}
-                            onToggleRead={handleToggleRead}
-                            onSummarize={handleSummarize}
-                            isSummarizing={isSummarizing === item.id}
+                            onSelect={handleSelectItem}
+                            onLongPress={() => {}} // Not used in search
                             onContextMenu={handleContextMenu}
+                            isInSelectionMode={false}
+                            isSelected={false}
                         />
                     ))}
                 </div>
@@ -180,12 +216,21 @@ const SearchScreen: React.FC = () => {
 
     return (
         <div className="pt-4 pb-4">
-            <header className="mb-4 sticky top-0 bg-black/80 backdrop-blur-md py-3 z-20 -mx-4 px-4 border-b border-[var(--border-color)]">
-                <h1 className="text-3xl font-bold text-gray-100">חיפוש</h1>
-                <div className="relative mt-4 flex items-center gap-2">
+            <header className="mb-6 sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 border-b border-[var(--border-primary)] -mx-4 px-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h1 className="text-3xl font-bold themed-title">{settings.screenLabels?.search || 'חיפוש'}</h1>
+                  <button 
+                      onClick={() => setActiveScreen('settings')}
+                      className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors"
+                      aria-label="הגדרות"
+                  >
+                      <SettingsIcon className="w-6 h-6"/>
+                  </button>
+                </div>
+                <div className="relative flex items-center gap-2">
                     <div className="relative flex-grow">
                         <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                            <SearchIcon className="h-5 w-5 text-gray-500" />
+                            <SearchIcon className="h-5 w-5 text-[var(--text-secondary)]" />
                         </div>
                         <input
                             type="search"
@@ -193,13 +238,13 @@ const SearchScreen: React.FC = () => {
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
                             placeholder="חפש או שאל את AI..."
-                            className="w-full bg-gray-900/80 border border-[var(--border-color)] text-gray-200 rounded-full py-3 pr-11 pl-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
+                            className={`w-full border text-[var(--text-primary)] rounded-2xl py-3 pr-11 pl-4 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50 focus:border-[var(--dynamic-accent-start)] transition-all ${settings.themeSettings.cardStyle === 'glass' ? 'bg-white/10 border-white/10 backdrop-blur-sm' : 'bg-[var(--bg-secondary)] border-[var(--border-primary)]'}`}
                         />
                     </div>
                     <button
                         onClick={handleAiSearch}
                         disabled={isAiLoading || query.length < 3}
-                        className="p-3 bg-gray-700 hover:bg-purple-600/50 text-purple-300 hover:text-white rounded-full transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-700"
+                        className="p-3 bg-[var(--accent-gradient)] text-white rounded-2xl transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]"
                         aria-label="שאל את AI"
                     >
                        <SparklesIcon className={`h-6 w-6 ${isAiLoading ? 'animate-pulse' : ''}`}/>
@@ -207,34 +252,38 @@ const SearchScreen: React.FC = () => {
                 </div>
             </header>
 
-            <div className="flex gap-2 mb-6 flex-wrap">
-                <span className="text-sm text-gray-500 font-semibold self-center">סוג:</span>
-                <FilterChip label="הכל" isActive={filters.type === 'all'} onClick={() => setFilters(f => ({ ...f, type: 'all' }))} />
-                <FilterChip label="ספארקים" isActive={filters.type === 'spark'} onClick={() => setFilters(f => ({ ...f, type: 'spark' }))} />
-                <FilterChip label="RSS" isActive={filters.type === 'rss'} onClick={() => setFilters(f => ({ ...f, type: 'rss' }))} />
-                <div className="w-px h-6 bg-gray-700 mx-2"></div>
-                <span className="text-sm text-gray-500 font-semibold self-center">סטטוס:</span>
-                <FilterChip label="הכל" isActive={filters.status === 'all'} onClick={() => setFilters(f => ({ ...f, status: 'all' }))} />
-                <FilterChip label="לא נקרא" isActive={filters.status === 'unread'} onClick={() => setFilters(f => ({ ...f, status: 'unread' }))} />
-                <FilterChip label="נקרא" isActive={filters.status === 'read'} onClick={() => setFilters(f => ({ ...f, status: 'read' }))} />
-            </div>
+            {searchResults.length > 0 && (
+                <div className="flex gap-2 mb-8 flex-wrap">
+                    <span className="text-sm text-[var(--text-secondary)] font-semibold self-center">סוג:</span>
+                    <FilterChip label="הכל" isActive={filters.type === 'all'} onClick={() => setFilters(f => ({ ...f, type: 'all' }))} />
+                    <FilterChip label="ספארקים" isActive={filters.type === 'spark'} onClick={() => setFilters(f => ({ ...f, type: 'spark' }))} />
+                    <FilterChip label="RSS" isActive={filters.type === 'rss'} onClick={() => setFilters(f => ({ ...f, type: 'rss' }))} />
+                    <div className="w-px h-6 bg-[var(--border-primary)] mx-2"></div>
+                    <span className="text-sm text-[var(--text-secondary)] font-semibold self-center">סטטוס:</span>
+                    <FilterChip label="הכל" isActive={filters.status === 'all'} onClick={() => setFilters(f => ({ ...f, status: 'all' }))} />
+                    <FilterChip label="לא נקרא" isActive={filters.status === 'unread'} onClick={() => setFilters(f => ({ ...f, status: 'unread' }))} />
+                    <FilterChip label="נקרא" isActive={filters.status === 'read'} onClick={() => setFilters(f => ({ ...f, status: 'read' }))} />
+                </div>
+            )}
+
 
             <div className="space-y-8">
                 {isAiLoading && (
-                    <div className="text-center text-gray-400 py-8 flex items-center justify-center gap-2">
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                    <div className="text-center text-[var(--text-secondary)] py-8 flex items-center justify-center gap-2">
+                        <div className="w-2 h-2 bg-[var(--dynamic-accent-start)] rounded-full animate-pulse"></div>
                         AI חושב...
                     </div>
                 )}
                 {aiAnswer && (
-                    <section className="glass-card p-4 rounded-xl border-l-4 border-purple-500">
-                        <h2 className="text-sm font-semibold text-purple-300 uppercase tracking-wider mb-2 flex items-center gap-2"><SparklesIcon className="w-4 h-4" /> תשובת AI</h2>
+                    <section className="relative themed-card p-4 animate-fade-in-up">
+                         <div className="absolute -top-px -left-px -right-px h-1.5 bg-[var(--accent-gradient)] rounded-t-2xl animate-pulse"></div>
+                        <h2 className="text-sm font-semibold text-[var(--accent-highlight)] uppercase tracking-wider mb-2 flex items-center gap-2"><SparklesIcon className="w-4 h-4" /> תשובת AI</h2>
                         <MarkdownRenderer content={aiAnswer} />
                     </section>
                 )}
 
                 {!isAiLoading && query && searchResults.length === 0 && (
-                     <div className="text-center text-gray-500 mt-16 flex flex-col items-center">
+                     <div className="text-center text-[var(--text-secondary)] mt-16 flex flex-col items-center">
                         <SearchIcon className="w-16 h-16 text-gray-700 mb-4"/>
                         <p className="max-w-xs">לא נמצאו תוצאות עבור "{query}"</p>
                     </div>
@@ -248,35 +297,35 @@ const SearchScreen: React.FC = () => {
                 )}
                 
                 {!query && !isAiLoading && (
-                    <div className="text-center text-gray-600 mt-24 flex flex-col items-center">
-                        <SearchIcon className="w-20 h-20 text-gray-700 mb-4"/>
-                        <p className="text-lg">חפש בכל הידע שלך</p>
-                        <p className="max-w-xs text-sm">הזן מילות מפתח או שאל שאלה מלאה את הבינה המלאכותית.</p>
+                    <div className="text-center text-gray-500 mt-16 flex flex-col items-center">
+                        <SearchIcon className="w-16 h-16 text-gray-700 mb-4"/>
+                        <h2 className="text-lg font-semibold text-white">חפש בידע שלך</h2>
+                        <p className="max-w-xs">הזן מונח חיפוש כדי למצוא פריטים, או שאל את AI שאלה כדי לקבל תשובה מסונתזת.</p>
                     </div>
                 )}
             </div>
-
-            <ItemDetailModal
+            
+            <ItemDetailModal 
                 item={selectedItem}
-                allItems={allItems}
-                onSelectItem={setSelectedItem}
+                onSelectItem={(item) => setSelectedItem(item)}
                 onClose={() => setSelectedItem(null)}
                 onSummarize={handleSummarize}
+                onUpdate={handleUpdateItem}
                 isSummarizing={!!isSummarizing}
             />
-             {contextMenu && (
+            {contextMenu.isOpen && contextMenu.item && (
                 <ContextMenu
                     x={contextMenu.x}
                     y={contextMenu.y}
                     item={contextMenu.item}
-                    onClose={() => setContextMenu(null)}
-                    onToggleRead={() => handleToggleRead(contextMenu.item.id)}
-                    onSummarize={() => handleSummarize(contextMenu.item)}
+                    onClose={closeContextMenu}
+                    onToggleRead={() => handleToggleRead(contextMenu.item!.id)}
+                    onSummarize={() => handleSummarize(contextMenu.item!)}
                     onDelete={handleDeleteItem}
+                    onAddToLibrary={handleAddToLibrary}
                 />
             )}
+            {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}
         </div>
     );
 };
-
-export default SearchScreen;

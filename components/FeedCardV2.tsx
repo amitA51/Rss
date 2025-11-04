@@ -1,85 +1,154 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import type { FeedItem } from '../types';
-import { FlameIcon, ReadIcon, UnreadIcon, SummarizeIcon } from './icons';
+import { SparklesIcon, FeedIcon, CheckCircleIcon, BrainCircuitIcon } from './icons';
+import { getTagColor } from './icons';
+import { AppContext } from '../state/AppContext';
 
 interface FeedCardV2Props {
   item: FeedItem;
   index: number;
-  onSelect: (item: FeedItem) => void;
-  onToggleRead: (id: string) => void;
-  onSummarize: (item: FeedItem) => void;
-  isSummarizing: boolean;
+  onSelect: (item: FeedItem, event: React.MouseEvent) => void;
+  onLongPress: (item: FeedItem) => void;
   onContextMenu: (event: React.MouseEvent, item: FeedItem) => void;
+  isInSelectionMode: boolean;
+  isSelected: boolean;
 }
 
-const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onToggleRead, onSummarize, isSummarizing, onContextMenu }) => {
-  const [isMounted, setIsMounted] = useState(false);
+const getFaviconUrl = (link: string) => {
+    try {
+        const url = new URL(link);
+        return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+    } catch (e) {
+        return ''; // return empty string for invalid URLs
+    }
+};
+
+
+const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPress, onContextMenu, isInSelectionMode, isSelected }) => {
+  const { state } = useContext(AppContext);
+  const { cardStyle } = state.settings.themeSettings;
+  
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (isInSelectionMode) {
+      e.preventDefault();
+      return;
+    }
+    onContextMenu(e, item);
+  }
+
+  const handleLongPress = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onLongPress(item);
+  }
+
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsMounted(true), 10);
-    return () => clearTimeout(timer);
-  }, []);
-  
-  const getFaviconUrl = (link: string | undefined) => {
-    if (!link) return '';
-    try {
-      const url = new URL(link);
-      return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
-    } catch (e) {
-      return '';
-    }
-  };
+    const card = cardRef.current;
+    if (!card || cardStyle !== 'glass') return;
 
-  const CardHeader = () => (
-    <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
-      {item.type === 'spark' ? (
-        <>
-          <FlameIcon className="w-4 h-4 text-orange-400" />
-          <span>ספארק</span>
-        </>
-      ) : (
-        <>
-          <img src={getFaviconUrl(item.link)} alt="" className="w-4 h-4 rounded-full bg-gray-700" />
-          <span className="truncate">{item.link ? new URL(item.link).hostname.replace('www.', '') : 'RSS'}</span>
-        </>
-      )}
-    </div>
-  );
+    const handleMouseMove = (e: MouseEvent) => {
+      const { left, top } = card.getBoundingClientRect();
+      const x = e.clientX - left;
+      const y = e.clientY - top;
+      card.style.setProperty('--mouse-x', `${x}px`);
+      card.style.setProperty('--mouse-y', `${y}px`);
+    };
+
+    card.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      if (card) {
+        card.removeEventListener('mousemove', handleMouseMove);
+      }
+    };
+  }, [cardStyle]);
+
+  const contentSnippet = item.summary_ai || item.content.split('\n')[0];
+  
+  let sourceText: string;
+  let icon: React.ReactNode;
+  
+  if (item.type === 'rss' && item.link) {
+    sourceText = new URL(item.link).hostname.replace('www.', '');
+    icon = <FeedIcon className="w-5 h-5" />;
+  } else if (item.type === 'spark') {
+    sourceText = 'ספארק אישי';
+    icon = <SparklesIcon className="w-5 h-5" />;
+  } else if (item.type === 'mentor') {
+    sourceText = item.title.replace('ציטוט מאת ', '').replace('סרטון מומלץ: ', '');
+    icon = <BrainCircuitIcon className="w-5 h-5" />;
+  } else {
+    sourceText = 'מקור לא ידוע';
+    icon = <FeedIcon className="w-5 h-5" />;
+  }
+  
+  const faviconUrl = item.type === 'rss' && item.link ? getFaviconUrl(item.link) : null;
 
   return (
     <div
-      onClick={() => onSelect(item)}
-      onContextMenu={(e) => onContextMenu(e, item)}
-      className={`group relative glass-card rounded-xl shadow-lg transition-all duration-300 ease-out cursor-pointer overflow-hidden
-        hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-blue-500/10 active:scale-[0.98] active:duration-75
-        ${item.is_read ? 'opacity-60 hover:opacity-100' : 'opacity-100'}
-        ${isMounted ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'}`}
-      style={{ transitionDelay: `${index * 50}ms` }}
+      ref={cardRef}
+      onClick={(e) => onSelect(item, e)}
+      onContextMenu={(e) => { e.preventDefault(); isInSelectionMode ? onSelect(item, e) : handleLongPress(e); }}
+      className={`group relative themed-card p-4 transition-all duration-300 ease-out cursor-pointer
+        hover:-translate-y-1 
+        active:scale-[0.98] active:duration-100
+        ${item.is_read && !isInSelectionMode ? 'opacity-60 hover:opacity-80' : ''}
+        ${isSelected ? 'selected' : ''}`}
+      style={{
+        borderRadius: '18px'
+      }}
     >
-      <div className="p-4">
-        <CardHeader />
-        <h3 className="text-lg font-semibold text-gray-100 group-hover:text-blue-300 transition-colors">{item.title}</h3>
-        <p className="text-sm text-gray-400 mt-1 line-clamp-2">{item.summary_ai || item.content}</p>
-      </div>
+      {cardStyle === 'glass' && (
+        <div 
+          className="absolute inset-0 rounded-[17px] opacity-0 group-hover:opacity-100 transition-opacity duration-300" 
+          style={{
+            background: `radial-gradient(400px circle at var(--mouse-x) var(--mouse-y), var(--dynamic-accent-glow), transparent)`
+          }}
+        ></div>
+      )}
       
-      <div className="flex items-center justify-end gap-2 px-4 pb-3 pt-1">
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleRead(item.id); }}
-          className="p-2 rounded-full hover:bg-blue-600/20 text-gray-400 hover:text-white transition-colors"
-          aria-label={item.is_read ? 'סמן כלא נקרא' : 'סמן כנקרא'}
-        >
-          {item.is_read ? <ReadIcon className="h-5 w-5" /> : <UnreadIcon className="h-5 w-5" />}
-        </button>
-        {!item.summary_ai && (
-            <button
-            onClick={(e) => { e.stopPropagation(); onSummarize(item); }}
-            disabled={isSummarizing}
-            className="p-2 rounded-full hover:bg-blue-600/20 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
-            aria-label="סכם"
-          >
-            <SummarizeIcon className={`h-5 w-5 ${isSummarizing ? 'animate-pulse' : ''}`} />
-          </button>
-        )}
+       {isInSelectionMode && (
+          <div className={`absolute top-3 left-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-[var(--dynamic-accent-start)] border-[var(--dynamic-accent-start)]' : 'border-gray-500 bg-black/20'}`}>
+              {isSelected && <CheckCircleIcon className="w-7 h-7 text-white" />}
+          </div>
+       )}
+
+      <div className={`flex items-start gap-4 relative transition-opacity ${isInSelectionMode ? 'opacity-80' : ''}`}>
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bg-secondary)] text-[var(--dynamic-accent-highlight)] mt-1">
+          {icon}
+        </div>
+        <div className="flex-1 overflow-hidden">
+            <div className="flex justify-between items-center">
+                 <h3 className="text-lg font-semibold text-[var(--text-primary)] transition-colors truncate group-hover:text-[var(--dynamic-accent-highlight)] pr-2">{item.title}</h3>
+                 {!item.is_read && !isInSelectionMode && <div className="w-2.5 h-2.5 bg-[var(--dynamic-accent-start)] rounded-full shrink-0 animate-pulse"></div>}
+            </div>
+            <p className="text-xs text-[var(--text-secondary)]/80 truncate flex items-center gap-1.5">
+                {faviconUrl && <img src={faviconUrl} alt="favicon" className="w-4 h-4 rounded-full bg-white/10" />}
+                <span>{sourceText}</span>
+            </p>
+            {contentSnippet && (
+                <p className="text-sm text-[var(--text-secondary)] line-clamp-2 mt-2">
+                    {contentSnippet}
+                </p>
+            )}
+            {item.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                    {item.tags.map((tag) => {
+                        const colors = getTagColor(tag.name);
+                        return (
+                            <span 
+                                key={tag.id} 
+                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                style={{ backgroundColor: colors.backgroundColor, color: colors.textColor }}
+                            >
+                                {tag.name}
+                            </span>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
       </div>
     </div>
   );

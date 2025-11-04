@@ -1,29 +1,10 @@
-import type { FeedItem, Tag, RssFeed, PersonalItem, AppData, Template } from '../types';
+import type { FeedItem, Tag, RssFeed, PersonalItem, Template, Space, Mentor } from '../types';
 
-// --- LocalStorage Persistence ---
-const loadFromStorage = <T>(key: string, defaultValue: T): T => {
-    try {
-        const item = window.localStorage.getItem(key);
-        if (item) return JSON.parse(item);
-    } catch (error) {
-        console.warn(`Error reading localStorage key “${key}”:`, error);
-    }
-    // If we return defaultValue, we should also save it to initialize storage
-    saveToStorage(key, defaultValue);
-    return defaultValue;
-};
+// This file now only serves to provide the initial, default data structure
+// for a fresh installation of the app. It is considered a private implementation
+// detail of the dataService.
 
-const saveToStorage = <T>(key: string, value: T): void => {
-    try {
-        window.localStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-        console.warn(`Error setting localStorage key “${key}”:`, error);
-    }
-};
-
-
-// --- Default Data ---
-const defaultTags: Tag[] = [
+export const defaultTags: Tag[] = [
   { id: '1', name: 'טכנולוגיה' },
   { id: '2', name: 'פרודוקטיביות' },
   { id: '3', name: 'AI' },
@@ -34,14 +15,19 @@ const defaultTags: Tag[] = [
   { id: '8', name: 'פסיכולוגיה' },
 ];
 
-const defaultRssFeeds: RssFeed[] = [
-  { id: 'rss1', name: 'כלכליסט - שוק ההון', url: 'https://www.calcalist.co.il/rss/calcalist,0,0,14,00.xml' },
-  { id: 'rss2', name: 'Dark Reading', url: 'https://www.darkreading.com/rss_simple.asp' },
-  { id: 'rss3', name: 'Psychology Today', url: 'https://www.psychologytoday.com/intl/en/front/feed' },
+export const defaultSpaces: Space[] = [
+    { id: 'space-p1', name: 'כללי', icon: 'clipboard', color: '#A78BFA', type: 'personal', order: 0 },
+    { id: 'space-p2', name: 'למידה', icon: 'brain', color: '#38BDF8', type: 'personal', order: 1 },
+    { id: 'space-f1', name: 'חדשות כלליות', icon: 'feed', color: '#60A5FA', type: 'feed', order: 0 },
 ];
 
-// Initial items now only contain sparks, RSS items will be fetched live.
-const defaultFeedItems: FeedItem[] = [
+export const defaultRssFeeds: RssFeed[] = [
+  { id: 'rss1', name: 'כלכליסט - שוק ההון', url: 'https://www.calcalist.co.il/rss/calcalist,0,0,14,00.xml', spaceId: 'space-f1' },
+  { id: 'rss2', name: 'Dark Reading', url: 'https://www.darkreading.com/rss_simple.asp' },
+  { id: 'rss3', name: 'Psychology Today', url: 'https://www.psychologytoday.com/intl/en/front/feed', spaceId: 'space-f1' },
+];
+
+export const defaultFeedItems: FeedItem[] = [
   {
     id: 'b2',
     type: 'spark',
@@ -65,7 +51,7 @@ const defaultFeedItems: FeedItem[] = [
   },
 ];
 
-const defaultPersonalItems: PersonalItem[] = [
+export const defaultPersonalItems: PersonalItem[] = [
      {
         id: 'p10',
         type: 'book',
@@ -79,7 +65,8 @@ const defaultPersonalItems: PersonalItem[] = [
             "We did not domesticate wheat. It domesticated us.",
             "The romantic ideal of 'following your heart' is an invention of the last few centuries."
         ],
-        metadata: { bookStatus: 'reading' }
+        metadata: { bookStatus: 'reading' },
+        spaceId: 'space-p2',
     },
     {
         id: 'p5',
@@ -90,6 +77,14 @@ const defaultPersonalItems: PersonalItem[] = [
         isCompleted: false,
         dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 days from now
         priority: 'high',
+        spaceId: 'space-p1',
+        subTasks: [
+            { id: 'sub1', title: 'איסוף נתונים וסטטיסטיקות', isCompleted: true },
+            { id: 'sub2', title: 'יצירת שקף פתיחה וסיום', isCompleted: true },
+            { id: 'sub3', title: 'בניית גוף המצגת (3-4 שקפים עיקריים)', isCompleted: false },
+            { id: 'sub4', title: 'הוספת עיצוב וגרפיקה', isCompleted: false },
+            { id: 'sub5', title: 'תרגול והכנה', isCompleted: false },
+        ]
     },
     {
         id: 'p6',
@@ -108,6 +103,7 @@ const defaultPersonalItems: PersonalItem[] = [
         content: '',
         isCompleted: false,
         priority: 'low',
+        spaceId: 'space-p1',
     },
     {
         id: 'p7',
@@ -118,6 +114,7 @@ const defaultPersonalItems: PersonalItem[] = [
         streak: 12,
         lastCompleted: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // Yesterday
         frequency: 'daily',
+        completionHistory: [],
     },
     {
         id: 'p8',
@@ -128,6 +125,7 @@ const defaultPersonalItems: PersonalItem[] = [
         streak: 4,
         lastCompleted: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
         frequency: 'daily',
+        completionHistory: [],
     },
     {
         id: 'p1',
@@ -140,7 +138,8 @@ const defaultPersonalItems: PersonalItem[] = [
             { id: 'ex2', name: 'דדליפט רומני', sets: [{ reps: 10, weight: 60 }, { reps: 10, weight: 60 }, { reps: 12, weight: 55 }] },
             { id: 'ex3', name: 'מכרעים', sets: [{ reps: 12, weight: 20 }, { reps: 12, weight: 20 }] },
         ],
-        metadata: { duration: 60, feeling: 'great' }
+        metadata: { duration: 60, feeling: 'great' },
+        spaceId: 'space-p1',
     },
     {
         id: 'p4',
@@ -150,7 +149,8 @@ const defaultPersonalItems: PersonalItem[] = [
         content: "Figma is a vector graphics editor and prototyping tool which is primarily web-based, with additional offline features enabled by desktop applications for macOS and Windows.",
         url: 'https://www.figma.com',
         domain: 'figma.com',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Figma-logo.svg/1667px-Figma-logo.svg.png'
+        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Figma-logo.svg/1667px-Figma-logo.svg.png',
+        spaceId: 'space-p2',
     },
     {
         id: 'p2',
@@ -166,7 +166,8 @@ const defaultPersonalItems: PersonalItem[] = [
                 "They can directly access server-side resources (e.g., databases).",
                 "They produce zero client-side JavaScript bundle size.",
             ]
-        }
+        },
+        spaceId: 'space-p2',
     },
     {
         id: 'p3',
@@ -174,10 +175,11 @@ const defaultPersonalItems: PersonalItem[] = [
         createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
         title: 'רשימת קניות',
         content: '[x] חלב\n[x] ביצים\n[ ] לחם\n[ ] אבוקדו',
+        spaceId: 'space-p1',
     }
 ];
 
-const defaultTemplates: Template[] = [
+export const defaultTemplates: Template[] = [
     {
         id: 'template-1',
         name: 'סקירה שבועית',
@@ -201,39 +203,34 @@ const defaultTemplates: Template[] = [
     }
 ];
 
-// --- Exported Live Data ---
-export let mockTags: Tag[] = loadFromStorage('spark_tags', defaultTags);
-export let mockRssFeeds: RssFeed[] = loadFromStorage('spark_rss_feeds', defaultRssFeeds);
-export let mockFeedItems: FeedItem[] = loadFromStorage('spark_feed_items', defaultFeedItems);
-export let mockPersonalItems: PersonalItem[] = loadFromStorage('spark_personal_items', defaultPersonalItems);
-export let mockTemplates: Template[] = loadFromStorage('spark_templates', defaultTemplates);
-
-// --- Savers ---
-export const saveTags = () => saveToStorage('spark_tags', mockTags);
-export const saveRssFeeds = () => saveToStorage('spark_rss_feeds', mockRssFeeds);
-export const saveFeedItems = () => saveToStorage('spark_feed_items', mockFeedItems);
-export const savePersonalItems = () => saveToStorage('spark_personal_items', mockPersonalItems);
-export const saveTemplates = () => saveToStorage('spark_templates', mockTemplates);
-
-// --- Bulk Data Operations ---
-export const getAllData = (): AppData => ({
-  tags: mockTags,
-  rssFeeds: mockRssFeeds,
-  feedItems: mockFeedItems,
-  personalItems: mockPersonalItems,
-  templates: mockTemplates,
-});
-
-export const replaceAllData = (data: AppData): void => {
-  mockTags = data.tags || [];
-  mockRssFeeds = data.rssFeeds || [];
-  mockFeedItems = data.feedItems || [];
-  mockPersonalItems = data.personalItems || [];
-  mockTemplates = data.templates || [];
-  
-  saveTags();
-  saveRssFeeds();
-  saveFeedItems();
-  savePersonalItems();
-  saveTemplates();
-};
+// --- New Mentor Data ---
+export const defaultMentors: Mentor[] = [
+    { 
+        id: 'jordan-peterson', 
+        name: 'ג\'ורדן פיטרסון', 
+        description: 'פסיכולוג קליני, מחבר ואיש רוח.',
+        quotes: [
+            'סדר את החדר שלך. קח אחריות על המרחב המיידי שלך.',
+            'השווה את עצמך למי שהיית אתמול, לא למי שמישהו אחר הוא היום.',
+            'רדוף אחר מה שמשמעותי, לא אחר מה שנוח.',
+            'אמור את האמת - או לפחות אל תשקר.',
+            'אל תתנו לילדיכם לעשות משהו שגורם לכם לא לחבב אותם.',
+            'התייחס לעצמך כאל מישהו שאתה אחראי לעזור לו.',
+            'התיידד עם אנשים שרוצים את הטוב ביותר עבורך.'
+        ] 
+    },
+    { 
+        id: 'david-goggins', 
+        name: 'דיוויד גוגינס', 
+        description: 'רץ אולטרה-מרתון, לוחם וסופר.',
+        quotes: [
+            'אל תפסיק כשאתה עייף. תפסיק כשסיימת.',
+            'הדבר היחיד שחשוב יותר מהכישרון שלך הוא הלב שלך.',
+            'המוח שלנו הוא הנשק החזק ביותר בעולם. ברגע שאתה מבין איך לשלוט בו, אתה יכול להשיג הכל.',
+            'אתה חייב לבנות קשיחות מנטלית. זה הדבר היחיד שתוכל להישען עליו כשהחיים ינסו להפיל אותך.',
+            'היחיד שיכול להגיד לך שאתה לא יכול לעשות משהו זה אתה. והוא לא חייב להיות צודק.',
+            'הכאב שאתה מרגיש היום יהיה הכוח שתרגיש מחר.',
+            'צא מאזור הנוחות שלך כל יום.'
+        ] 
+    }
+];

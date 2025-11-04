@@ -4,22 +4,124 @@
   "description": "A zero-maintenance personal terminal for your thoughts and feeds. Dark mode only, Hebrew UI, powered by AI for summarization and tagging.",
   "icons": [
     {
-      "src": "/icon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
-      "purpose": "any"
+      "src": "/images/resized-image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/icon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
-      "purpose": "maskable"
+      "src": "/images/480538-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
-  "background_color": "#050509",
-  "theme_color": "#050509",
+  "orientation": "portrait-primary",
+  "background_color": "#0E0B09",
+  "theme_color": "#0E0B09",
   "lang": "he",
-  "dir": "rtl"
+  "dir": "rtl",
+  "capture_links": "existing-client-navigate",
+  "file_handlers": [
+    {
+      "action": "/?action=import",
+      "accept": {
+        "application/json": [
+          ".json"
+        ]
+      }
+    }
+  ],
+  "categories": ["productivity", "lifestyle", "personalization", "news"],
+  "screenshots": [
+    {
+      "src": "/images/screenshot-home.png",
+      "sizes": "1080x2340",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your personal dashboard for tasks and habits."
+    },
+    {
+      "src": "/images/screenshot-feed.png",
+      "sizes": "1080x2340",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Curate and summarize your personal feeds with AI."
+    },
+    {
+      "src": "/images/screenshot-add.png",
+      "sizes": "1080x2340",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Quickly add sparks, notes, tasks, and more."
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "הוסף משימה חדשה",
+      "short_name": "משימה",
+      "url": "/?action=add_task",
+       "icons": [{ "src": "/images/resized-image.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "הוסף ספארק חדש",
+      "short_name": "ספארק",
+      "url": "/?action=add_spark",
+      "icons": [{ "src": "/images/resized-image.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "פתח את 'היום'",
+      "short_name": "היום",
+      "url": "/?action=go_today",
+      "icons": [{ "src": "/images/resized-image.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "פתח את הפיד",
+      "short_name": "פיד",
+      "url": "/?action=go_feed",
+      "icons": [{ "src": "/images/resized-image.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "/?action=share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "widgets": [
+    {
+      "name": "הוספה מהירה ל-Spark",
+      "short_name": "הוספה",
+      "description": "הוסף במהירות משימה או ספארק חדש.",
+      "tag": "quick-add",
+      "template": "list",
+      "icons": [{ "src": "/images/resized-image.png", "sizes": "192x192" }],
+      "data": {
+        "items": [
+          {
+            "label": "משימה חדשה",
+            "url": "/?action=add_task"
+          },
+          {
+            "label": "ספארק חדש",
+            "url": "/?action=add_spark"
+          }
+        ]
+      }
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+spark",
+      "url": "/?action=search&q=%s"
+    }
+  ]
 }

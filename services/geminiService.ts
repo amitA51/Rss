@@ -1,326 +1,53 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { FeedItem, Tag, RssFeed, Attachment, PersonalItem, ExportData, AppData, Template } from '../types';
-import { mockFeedItems, mockTags, mockRssFeeds, mockPersonalItems, mockTemplates, saveFeedItems, saveRssFeeds, saveTags, savePersonalItems, saveTemplates, getAllData, replaceAllData } from './mockData';
-import { loadSettings, saveSettings } from './settingsService';
+import type { FeedItem, Tag, PersonalItem, Space, RoadmapStep } from '../types';
+import { loadSettings } from './settingsService';
+import { getFeedItems, getPersonalItems } from './dataService';
 
-// This is a placeholder for the API key which should be handled by the environment.
+// This service is now SOLELY responsible for interacting with the Gemini API.
+// All local data persistence has been moved to `dataService.ts`.
+
 const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  // In a real app, you might want to handle this more gracefully.
+
+let ai: GoogleGenAI | null = null;
+if (API_KEY) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+} else {
   console.warn("API_KEY is not set. AI features will not work.");
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// --- MOCK API FUNCTIONS ---
+// ==================================================================================
+// --- GEMINI AI SERVICES ---
+// ==================================================================================
 
-const ITEMS_PER_PAGE = 10;
-
-export const getFeedItems = (page: number): Promise<FeedItem[]> => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const sortedItems = [...mockFeedItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      const start = (page - 1) * ITEMS_PER_PAGE;
-      const end = start + ITEMS_PER_PAGE;
-      const paginatedItems = sortedItems.slice(start, end);
-      resolve(paginatedItems);
-    }, 500);
-  });
-};
-
-export const updateFeedItem = (id: string, updates: Partial<Pick<FeedItem, 'is_read' | 'summary_ai'>>): Promise<FeedItem> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockFeedItems.findIndex(item => item.id === id);
-            if (index > -1) {
-                mockFeedItems[index] = { ...mockFeedItems[index], ...updates };
-                saveFeedItems();
-                resolve(mockFeedItems[index]);
-            } else {
-                reject(new Error("Feed item not found"));
-            }
-        }, 100);
-    });
-};
-
-export const markAllAsRead = (): Promise<void> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            mockFeedItems.forEach(item => {
-                item.is_read = true;
-            });
-            saveFeedItems();
-            resolve();
-        }, 300);
-    });
-};
-
-
-export const getTags = (): Promise<Tag[]> => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve([...mockTags]);
-    }, 200);
-  });
-};
-
-export const addTag = (name: string): Promise<Tag> => {
-    return new Promise((resolve, reject) => {
-        if (mockTags.some(tag => tag.name.toLowerCase() === name.toLowerCase())) {
-            return reject(new Error("Tag already exists"));
-        }
-        setTimeout(() => {
-            const newTag: Tag = { id: `tag-${Date.now()}`, name };
-            mockTags.push(newTag);
-            saveTags();
-            resolve(newTag);
-        }, 200);
-    });
-};
-
-export const removeTag = (id: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockTags.findIndex(tag => tag.id === id);
-            if (index > -1) {
-                mockTags.splice(index, 1);
-                saveTags();
-                resolve();
-            } else {
-                reject(new Error("Tag not found"));
-            }
-        }, 200);
-    });
-};
-
-export const searchFeedItems = (query: string, allItems: FeedItem[]): FeedItem[] => {
-    if (!query) {
-        return [];
-    }
-    const lowerCaseQuery = query.toLowerCase();
-    const queryTerms = lowerCaseQuery.split(' ').filter(term => term.length > 0);
-
-    return allItems.filter(item => {
-        const itemText = [
-            item.title,
-            item.content,
-            item.summary_ai || '',
-            ...item.tags.map(tag => tag.name)
-        ].join(' ').toLowerCase();
-
-        return queryTerms.every(term => itemText.includes(term));
-    });
-};
-
-export const addSpark = (spark: { title: string, content: string, tags: Tag[], attachments?: Attachment[] }): Promise<FeedItem> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const newSpark: FeedItem = {
-                id: `spark-${Date.now()}`,
-                type: 'spark',
-                is_read: false,
-                is_spark: true,
-                createdAt: new Date().toISOString(),
-                ...spark
-            };
-            mockFeedItems.unshift(newSpark);
-            saveFeedItems();
-            resolve(newSpark);
-        }, 500);
-    });
-};
-
-export const getFeeds = (): Promise<RssFeed[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve([...mockRssFeeds]);
-        }, 300);
-    });
-};
-
-export const addFeed = (url: string): Promise<RssFeed> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            try {
-              const urlObject = new URL(url);
-              let name = urlObject.hostname.replace(/^www\./, '');
-              name = name.charAt(0).toUpperCase() + name.slice(1);
-
-              const newFeed: RssFeed = {
-                  id: `rss-${Date.now()}`,
-                  url,
-                  name,
-              };
-              mockRssFeeds.push(newFeed);
-              saveRssFeeds();
-              resolve(newFeed);
-            } catch (error) {
-              // A real implementation would parse the feed to get the title
-              const newFeed: RssFeed = { id: `rss-${Date.now()}`, url, name: "New Feed" };
-              mockRssFeeds.push(newFeed);
-              saveRssFeeds();
-              resolve(newFeed);
-            }
-        }, 500);
-    });
-};
-
-export const removeFeed = (id: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockRssFeeds.findIndex(feed => feed.id === id);
-            if (index > -1) {
-                mockRssFeeds.splice(index, 1);
-                saveRssFeeds();
-                resolve();
-            } else {
-                reject(new Error("Feed not found"));
-            }
-        }, 300);
-    });
-};
-
-export const getAllItems = (): Promise<FeedItem[]> => {
-  return new Promise(resolve => resolve([...mockFeedItems]));
-};
-
-// --- Personal Items ---
-
-export const getPersonalItems = (): Promise<PersonalItem[]> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const sorted = [...mockPersonalItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            resolve(sorted);
-        }, 300);
-    });
-};
-
-export const addPersonalItem = (item: Omit<PersonalItem, 'id' | 'createdAt'>): Promise<PersonalItem> => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const newItem: PersonalItem = {
-                id: `p-${Date.now()}`,
-                createdAt: new Date().toISOString(),
-                ...item
-            };
-            mockPersonalItems.unshift(newItem);
-            savePersonalItems();
-            resolve(newItem);
-        }, 300);
-    });
-};
-
-export const updatePersonalItem = (id: string, updates: Partial<PersonalItem>): Promise<PersonalItem> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockPersonalItems.findIndex(item => item.id === id);
-            if (index > -1) {
-                mockPersonalItems[index] = { ...mockPersonalItems[index], ...updates };
-                savePersonalItems();
-                resolve(mockPersonalItems[index]);
-            } else {
-                reject(new Error("Personal item not found"));
-            }
-        }, 100);
-    });
-};
-
-export const removeFeedItem = (id: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockFeedItems.findIndex(item => item.id === id);
-            if (index > -1) {
-                mockFeedItems.splice(index, 1);
-                saveFeedItems();
-                resolve();
-            } else {
-                reject(new Error("Feed item not found"));
-            }
-        }, 200);
-    });
-};
-
-export const removePersonalItem = (id: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const initialLength = mockPersonalItems.length;
-            const updatedItems = mockPersonalItems.filter(item => item.id !== id);
-            if (updatedItems.length < initialLength) {
-                replaceAllData({ ...getAllData(), personalItems: updatedItems });
-                resolve();
-            } else {
-                reject(new Error("Personal item not found"));
-            }
-        }, 200);
-    });
-};
-
-// --- Template Management ---
-export const getTemplates = (): Promise<Template[]> => {
-    return new Promise(resolve => resolve([...mockTemplates]));
-};
-
-export const addTemplate = (template: Omit<Template, 'id'>): Promise<Template> => {
-    return new Promise(resolve => {
-        const newTemplate: Template = { id: `template-${Date.now()}`, ...template };
-        mockTemplates.push(newTemplate);
-        saveTemplates();
-        resolve(newTemplate);
-    });
-};
-
-export const removeTemplate = (id: string): Promise<void> => {
-    return new Promise(resolve => {
-        const index = mockTemplates.findIndex(t => t.id === id);
-        if (index > -1) {
-            mockTemplates.splice(index, 1);
-            saveTemplates();
-        }
-        resolve();
-    });
-};
-
-// --- Data Management ---
-
-export const exportAllData = (): string => {
-    const data: ExportData = {
-        settings: loadSettings(),
-        data: getAllData(),
-        exportDate: new Date().toISOString(),
-        version: 1,
-    };
-    return JSON.stringify(data, null, 2);
-};
-
-export const importAllData = (jsonData: string): void => {
+/**
+ * A robust utility to parse potentially malformed JSON from an AI response.
+ * @param responseText The raw text response from the AI model.
+ * @returns The parsed JSON object.
+ * @throws {Error} if the JSON is unparseable.
+ */
+const parseAiJson = <T>(responseText: string): T => {
+    const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     try {
-        const imported: ExportData = JSON.parse(jsonData);
-        if (!imported.version || !imported.data || !imported.settings) {
-            throw new Error("Invalid import file format.");
-        }
-        if (window.confirm("This will overwrite all existing data. Are you sure you want to continue?")) {
-            replaceAllData(imported.data);
-            saveSettings(imported.settings);
-            alert("Data imported successfully. The app will now reload.");
-            window.location.reload();
-        }
-    } catch (error) {
-        console.error("Failed to import data:", error);
-        alert("Failed to import data. Please check the file format.");
+        return JSON.parse(cleanedText);
+    } catch (parseError) {
+        console.error("AI response was not valid JSON:", cleanedText, parseError);
+        throw new Error("תגובת ה-AI לא הייתה בפורמט JSON תקין.");
     }
 };
 
-// --- GEMINI API FUNCTIONS ---
 
+/**
+ * Extracts text from a base64 encoded image using the Gemini API.
+ * @param base64ImageData The base64 encoded image data.
+ * @param mimeType The mimeType of the image.
+ * @returns A promise that resolves to the extracted text.
+ */
 export const extractTextFromImage = async (base64ImageData: string, mimeType: string): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
     const imagePart = {
-        inlineData: {
-            data: base64ImageData,
-            mimeType: mimeType,
-        },
+        inlineData: { data: base64ImageData, mimeType },
     };
-    const textPart = {
-        text: 'Extract all text from this image, in its original language. Respond only with the extracted text.',
-    };
+    const textPart = { text: 'Extract all text from this image, in its original language. Respond only with the extracted text.' };
 
     try {
         const response = await ai.models.generateContent({
@@ -334,13 +61,23 @@ export const extractTextFromImage = async (base64ImageData: string, mimeType: st
     }
 };
 
-
+/**
+ * Performs a semantic search over all items using the Gemini API.
+ * @param query The user's search query.
+ * @param allItems The corpus of items to search through.
+ * @returns An object containing the AI's synthesized answer and an array of relevant item IDs.
+ */
 export const performAiSearch = async (query: string, allItems: FeedItem[]): Promise<{ answer: string | null, itemIds: string[] }> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const corpus = allItems.map(item => ({
+    // CRITICAL FIX: Limit the search corpus to the 200 most recent items to prevent token limit errors.
+    const corpus = allItems
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 200)
+      .map(item => ({
         id: item.id,
         title: item.title,
-        content: item.summary_ai || item.content,
+        content: (item.summary_ai || item.content).substring(0, 500), // Truncate content
         tags: item.tags.map(t => t.name),
         type: item.type,
         createdAt: item.createdAt
@@ -352,8 +89,8 @@ The user has provided a search query in Hebrew. Your task is to:
 2. Search through the provided list of items (JSON format) to find the most relevant ones.
 3. If the query is a question or implies synthesis, generate a concise answer in Hebrew based on the content of the relevant items. Use Markdown for formatting.
 4. Return a JSON object with two keys:
-    - "answer": A string with the synthesized answer in Hebrew (Markdown formatted), or null if the query was not a question that required a synthesized answer.
-    - "itemIds": A JSON array of strings, containing the IDs of the most relevant items, sorted by relevance. Return up to 15 relevant IDs.
+    - "answer": A string with the synthesized answer in Hebrew (Markdown formatted), or null if not applicable.
+    - "itemIds": A JSON array of strings, containing the IDs of the most relevant items, sorted by relevance (up to 15).
 
 User Query: "${query}"
 
@@ -366,29 +103,80 @@ Respond ONLY with the JSON object.`;
         const response = await ai.models.generateContent({
             model: settings.aiModel,
             contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        answer: { type: Type.STRING, nullable: true },
-                        itemIds: { type: Type.ARRAY, items: { type: Type.STRING } }
-                    },
-                    required: ['answer', 'itemIds']
-                }
-            }
         });
-        return JSON.parse(response.text);
-    } catch(e) {
-        console.error("Error in performAiSearch:", e);
-        throw new Error("AI search request failed.");
+
+        return parseAiJson<{ answer: string | null, itemIds: string[] }>(response.text);
+
+    } catch (error) {
+        console.error("Error performing AI search:", error);
+        throw new Error("Failed to perform AI search.");
     }
 };
 
-
-export const summarizeItemContent = async (content: string): Promise<string> => {
+/**
+ * Parses a natural language query to extract task details.
+ * @param query The user's input string.
+ * @returns An object containing the task title and due date.
+ */
+export const parseNaturalLanguageTask = async (query: string): Promise<{ title: string; dueDate: string | null }> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const prompt = `Summarize the following text in Hebrew into a concise paragraph. The summary should capture the main points and be easy to understand. Text to summarize:\n---\n${content}\n---\nSummary:`;
+    const today = new Date().toISOString().split('T')[0];
+
+    const prompt = `You are a smart task parser for a productivity app. Analyze the following text written in Hebrew and extract the task details.
+    Today's date is: ${today}.
+    - The 'title' should be the core action of the task.
+    - The 'dueDate' should be in YYYY-MM-DD format. Interpret relative terms like "מחר", "מחרתיים", "היום", "בעוד 3 ימים", etc., based on today's date. If no date is mentioned, 'dueDate' should be null.
+    - Ignore any time of day information.
+    
+    Text to parse: "${query}"
+    
+    Respond ONLY with a valid JSON object matching the specified schema.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING, description: "The main title of the task." },
+                        dueDate: { type: Type.STRING, description: "The due date in YYYY-MM-DD format, or null if not specified." }
+                    },
+                    required: ['title', 'dueDate']
+                }
+            }
+        });
+        
+        const parsed = JSON.parse(response.text);
+        return {
+            title: parsed.title,
+            dueDate: parsed.dueDate 
+        };
+    } catch (error) {
+        console.error("Error parsing natural language task:", error);
+        return { title: query, dueDate: null };
+    }
+};
+
+/**
+ * Summarizes the content of a single item using the Gemini API.
+ * @param content The text content to summarize.
+ * @returns The AI-generated summary.
+ */
+export const summarizeItemContent = async (content: string): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Summarize the following text concisely in Hebrew, in 2-4 bullet points. Focus on the key takeaways.
+
+Text:
+---
+${content}
+---
+
+Summary:`;
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
@@ -401,67 +189,177 @@ export const summarizeItemContent = async (content: string): Promise<string> => 
     }
 };
 
-export const autoTagContent = async (content: string, availableTags: Tag[]): Promise<string[]> => {
+/**
+ * Finds feed items related to a given item using the Gemini API.
+ * @param currentItem The item to find relations for.
+ * @param allItems The corpus of items to search through.
+ * @returns An array of related FeedItems.
+ */
+export const findRelatedItems = async (currentItem: FeedItem, allItems: FeedItem[]): Promise<FeedItem[]> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const tagList = availableTags.map(tag => `"${tag.name}"`).join(', ');
+    const corpus = allItems
+        .filter(item => item.id !== currentItem.id)
+        .map(item => ({
+            id: item.id,
+            title: item.title,
+            content: (item.summary_ai || item.content).substring(0, 300),
+            tags: item.tags.map(t => t.name)
+        }));
+    
+    const prompt = `You are a smart content recommender. Based on the "Current Item" provided, find the 3 most relevant items from the "Corpus of Items".
+Prioritize items with semantic similarity in content, not just shared tags.
+Respond with a JSON object containing a single key "relatedItemIds", which is an array of the top 3 most relevant item IDs.
 
-    const prompt = `Analyze the following text and select up to 3 of the most relevant tags from the provided list. Return the result as a JSON array of tag names.\nAvailable tags: [${tagList}]\n\nText to analyze:\n---\n${content}\n---\n\nRelevant tags (JSON array):`;
+Current Item:
+${JSON.stringify({ title: currentItem.title, content: (currentItem.summary_ai || currentItem.content).substring(0, 500) })}
+
+Corpus of Items:
+${JSON.stringify(corpus)}
+
+Respond ONLY with the JSON object.`;
+
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
             contents: prompt,
         });
-        let responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const suggestedTagNames: string[] = JSON.parse(responseText);
-        return availableTags
-            .filter(tag => suggestedTagNames.includes(tag.name))
-            .map(tag => tag.id);
+        
+        const result = parseAiJson<{ relatedItemIds: string[] }>(response.text);
+        const relatedIds = new Set(result.relatedItemIds);
+        return allItems.filter(item => relatedIds.has(item.id));
+
     } catch (error) {
-        console.error("Error auto-tagging content:", error);
-        throw new Error("Failed to auto-tag content.");
+        console.error("Error finding related items:", error);
+        return [];
     }
 };
 
-export const refreshAllFeeds = async (): Promise<void> => {
-    // This is a mock function as fetching and parsing RSS is complex.
-    return new Promise(resolve => {
-        setTimeout(async () => {
-            const newRssItem: FeedItem = {
-                id: `rss-${Date.now()}`,
-                type: 'rss',
-                title: 'כתבה חדשה מרענון פיד (דמו)',
-                link: 'https://example.com',
-                content: 'זוהי כתבה חדשה שנוספה באופן אוטומטי בעת רענון הפידים. התוכן שלה מדבר על ההתפתחויות האחרונות בעולם הטכנולוגיה והבינה המלאכותית.',
-                is_read: false,
-                is_spark: false,
-                tags: [],
-                createdAt: new Date().toISOString(),
-            };
-            mockFeedItems.unshift(newRssItem);
+/**
+ * Creates a chat session for the AI Assistant screen, pre-loaded with context.
+ */
+export const createAssistantChat = async (): Promise<Chat> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    // FIX: Added `await` to the `getFeedItems()` and `getPersonalItems()` calls inside `createAssistantChat`. These functions now return Promises, and awaiting them ensures the data is fetched and available before being used to construct the chat context, preventing a race condition.
+    const [feedItems, personalItems] = await Promise.all([getFeedItems(), getPersonalItems()]);
 
-            if (loadSettings().autoSummarize) {
-                try {
-                    const summary = await summarizeItemContent(newRssItem.content);
-                    await updateFeedItem(newRssItem.id, { summary_ai: summary });
-                } catch (error) {
-                    console.error("Auto-summarization failed for new item", error);
-                }
-            }
-            saveFeedItems();
-            resolve();
-        }, 1000);
+    const context = `
+        Here is some context about the user's data. Use this to answer their questions.
+        - The user has ${feedItems.length} items in their feed. Recent titles include: ${feedItems.slice(0, 5).map(i => i.title).join(', ')}.
+        - The user has ${personalItems.length} personal items. Some of them are: ${personalItems.slice(0, 5).map(i => i.title).join(', ')}.
+    `;
+
+    const chat = ai.chats.create({
+        model: settings.aiModel,
+        config: {
+            systemInstruction: `You are a helpful personal assistant for the "Spark" app. The user is asking you questions about their personal data.
+            Be concise and helpful. Use the context provided.
+            ${context}`,
+        },
+        history: [{
+            role: 'user',
+            parts: [{ text: "Hello, I have some questions about my data." }],
+        }, {
+            role: 'model',
+            parts: [{ text: "Hello! I'm ready to help. I have some context about your recent feed and personal items. What would you like to know?" }],
+        }]
     });
+    return chat;
 };
 
-export const synthesizeContent = async (itemsToSynthesize: FeedItem[]): Promise<string> => {
+export const getUrlMetadata = async (url: string): Promise<Partial<PersonalItem>> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    let contentToProcess = "";
-    itemsToSynthesize.forEach(item => {
-        contentToProcess += `--- ITEM START ---\nTitle: ${item.title}\nContent: ${item.summary_ai || item.content}\n--- ITEM END ---\n\n`;
-    });
-    const prompt = `You are a helpful AI assistant. Your task is to synthesize the following articles and notes into a coherent summary. Identify the main themes, connections, and key takeaways. Present the output in Hebrew using Markdown for clear formatting.\n\nHere is the content to synthesize:\n${contentToProcess}\n\nPlease provide a structured synthesis.`;
+    const prompt = `Fetch the metadata and a brief summary for the following URL.
+    URL: ${url}
+    Respond with a JSON object containing: "title", "content" (a 2-3 sentence summary in Hebrew), and "imageUrl" (a relevant image URL from the page).`;
+
     try {
-        const response = await ai.models.generateContent({ model: settings.aiModel, contents: prompt });
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+             config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        content: { type: Type.STRING },
+                        imageUrl: { type: Type.STRING },
+                    },
+                    required: ['title', 'content']
+                }
+            }
+        });
+        const metadata = JSON.parse(response.text);
+        return {
+            title: metadata.title,
+            content: metadata.content,
+            imageUrl: metadata.imageUrl,
+            url: url,
+            domain: new URL(url).hostname,
+        };
+    } catch (error) {
+        console.error("Error fetching URL metadata:", error);
+        return { url, title: 'Could not fetch title', content: '' };
+    }
+};
+
+export const generateMentorContent = async (mentorName: string): Promise<string[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Generate a list of 7 short, powerful, and insightful quotes or pieces of advice in Hebrew, in the style of ${mentorName}.
+    Return the response as a JSON object with a single key "quotes" which is an array of 7 strings.`;
+    
+     try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+             config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        quotes: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        },
+                    },
+                    required: ['quotes']
+                }
+            }
+        });
+        const result = JSON.parse(response.text);
+        return result.quotes;
+    } catch (error) {
+        console.error("Error generating mentor content:", error);
+        return [];
+    }
+};
+
+export const synthesizeContent = async (items: FeedItem[]): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const contentToSynthesize = items.map(item => `
+        ### ${item.title}
+        ${item.summary_ai || item.content}
+    `).join('\n---\n');
+
+    const prompt = `Synthesize the key themes and takeaways from the following articles. Provide a concise summary in Hebrew using Markdown formatting.
+
+        Content:
+        ---
+        ${contentToSynthesize}
+        ---
+
+        Synthesis:`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+        });
         return response.text;
     } catch (error) {
         console.error("Error synthesizing content:", error);
@@ -469,71 +367,154 @@ export const synthesizeContent = async (itemsToSynthesize: FeedItem[]): Promise<
     }
 };
 
-export const findRelatedItems = async (currentItem: FeedItem, allItems: FeedItem[]): Promise<FeedItem[]> => {
+export const generateDailyBriefing = async (tasks: PersonalItem[], habits: PersonalItem[], gratitude: string | null): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const searchCorpus = allItems.filter(item => item.id !== currentItem.id);
-    if (searchCorpus.length === 0) return [];
+    const prompt = `
+    You are a personal assistant creating a daily briefing in Hebrew.
+    Based on the following data, create a short, encouraging, and focused summary for the user's day.
+    Use Markdown for formatting. Address the user directly ("היום", "יש לך", etc.).
+    - Start with a positive opening.
+    - Highlight the top 1-3 most important tasks.
+    - Mention the habits for today and their current streaks to encourage continuation.
+    - If a gratitude entry is available, reflect on it positively.
+    - End with an encouraging closing statement.
 
-    const corpusForPrompt = searchCorpus.map(item => ({ id: item.id, title: item.title, summary: item.summary_ai || item.content.substring(0, 150) + '...' }));
-    const prompt = `From the following list of items, identify the 3 most relevant items related to the "Current Item".\n\nCurrent Item:\nID: ${currentItem.id}\nTitle: ${currentItem.title}\nSummary: ${currentItem.summary_ai || currentItem.content.substring(0, 200) + '...'}\n\nList of items to search from:\n${JSON.stringify(corpusForPrompt, null, 2)}\n\nReturn your answer as a JSON array of strings, where each string is the ID of a relevant item. For example: ["id1", "id2", "id3"]. Only return the JSON array.`;
+    Data:
+    - Today's Date: ${new Date().toLocaleDateString('he-IL')}
+    - Top Tasks: ${tasks.length > 0 ? JSON.stringify(tasks.map(t => t.title)) : "No tasks today."}
+    - Habits: ${habits.length > 0 ? JSON.stringify(habits.map(h => ({ title: h.title, streak: h.streak || 0 }))) : "No habits for today."}
+    - Gratitude: ${gratitude || "Not provided."}
 
-    try {
-        const response = await ai.models.generateContent({ model: settings.aiModel, contents: prompt });
-        const responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const relatedIds: string[] = JSON.parse(responseText);
-        return relatedIds.map(id => allItems.find(item => item.id === id)).filter((item): item is FeedItem => !!item);
-    } catch (error) {
-        console.error("Error finding related items:", error);
-        return []; // Return empty array on failure
-    }
-};
+    Briefing:
+    `;
 
-export const createAssistantChat = (allItems: FeedItem[]): Chat => {
-    const settings = loadSettings();
-    const context = `You are "Sparky", a personal AI assistant in the "Spark" app. Help the user analyze and connect insights from their collected items. Be helpful and insightful. Respond in Hebrew.\n\nHere is the user's collection:\n${JSON.stringify(allItems.map(item => ({ id: item.id, type: item.type, title: item.title, summary: item.summary_ai || item.content.substring(0, 200), tags: item.tags.map(t => t.name) })), null, 2)}\n\nStart by introducing yourself and suggest a question, e.g., "מה הקשר בין הפריטים האחרונים שלי?" or "סכם לי את המאמרים בנושא AI".`;
-    return ai.chats.create({ model: settings.aiModel, history: [{ role: 'user', parts: [{ text: context }] }] });
-};
-
-export const getContentFromUrl = async (url: string): Promise<{ title: string, content: string }> => {
-    const settings = loadSettings();
-    const prompt = `Please fetch the main content from the URL: ${url}. Provide the article's original title and a concise summary of the content. Return a JSON object with keys: "title" and "content".`;
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
             contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, content: { type: Type.STRING } }, required: ['title', 'content'] }
-            },
         });
-        return JSON.parse(response.text);
+        return response.text;
     } catch (error) {
-        console.error("Error getting content from URL:", error);
-        throw new Error("Failed to fetch and summarize content from the URL.");
+        console.error("Error generating daily briefing:", error);
+        throw new Error("Failed to generate briefing.");
     }
 };
 
-export const getUrlMetadata = async (url: string, allTags: Tag[]): Promise<Partial<PersonalItem>> => {
+export const summarizeSpaceContent = async (items: PersonalItem[], spaceName: string): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const tagList = allTags.map(t => t.name).join(', ');
-    const prompt = `Analyze the webpage at URL: ${url}. Extract: title, a one-paragraph summary (for 'content'), a direct URL to a relevant image ('imageUrl'), the root domain ('domain'), and suggest up to 3 relevant tags from this list: [${tagList}]. Return a JSON object with keys: "title", "content", "imageUrl", "domain", "suggestedTags" (an array of strings).`;
+    const content = items.slice(0, 20).map(item => `
+        Type: ${item.type}
+        Title: ${item.title}
+        Content: ${(item.content || '').substring(0, 300)}
+    `).join('\n---\n');
+
+    const prompt = `You are an AI assistant. Summarize the content of the personal space named "${spaceName}".
+    Identify the main themes, projects, and areas of focus based on the items provided.
+    The summary should be in Hebrew and formatted in Markdown.
+
+    Items:
+    ${content}
+
+    Summary:`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error summarizing space:", error);
+        throw new Error("Failed to summarize space.");
+    }
+};
+
+export const generateFlashcards = async (content: string): Promise<{id: string; question: string; answer: string}[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Based on the following text, generate 3-5 question/answer flashcards in Hebrew to help with learning the key concepts.
+    Return a JSON object with a key "flashcards", which is an array of objects, each with "question" and "answer" keys.
+
+    Text:
+    ${content}
+
+    JSON Response:`;
+    
     try {
         const response = await ai.models.generateContent({
             model: settings.aiModel,
             contents: prompt,
             config: {
-                responseMimeType: 'application/json',
+                responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
-                    properties: { title: { type: Type.STRING }, content: { type: Type.STRING }, imageUrl: { type: Type.STRING }, domain: { type: Type.STRING }, suggestedTags: { type: Type.ARRAY, items: { type: Type.STRING } } },
-                    required: ['title', 'content', 'imageUrl', 'domain', 'suggestedTags']
+                    properties: {
+                        flashcards: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    question: { type: Type.STRING },
+                                    answer: { type: Type.STRING },
+                                },
+                                required: ['question', 'answer']
+                            }
+                        },
+                    },
+                    required: ['flashcards']
                 }
-            },
+            }
         });
         const result = JSON.parse(response.text);
-        return { title: result.title, content: result.content, imageUrl: result.imageUrl, domain: result.domain, metadata: { suggestedTags: result.suggestedTags } };
+        return result.flashcards.map((fc: any) => ({...fc, id: `fc-${Date.now()}-${Math.random()}`}));
     } catch (error) {
-        console.error("Error getting URL metadata:", error);
-        throw new Error("Failed to fetch metadata from the URL.");
+        console.error("Error generating flashcards:", error);
+        throw new Error("Failed to generate flashcards.");
+    }
+};
+
+export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapStep, 'isCompleted' | 'id' | 'notes'>[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Based on the following goal, generate a high-level roadmap with 3-5 main steps. For each step, provide a title, a short description, and an estimated duration (e.g., "1 week", "2 days").
+    Return a JSON object with a key "steps", which is an array of objects, each with "title", "description", and "duration" keys. The response must be in Hebrew.
+
+    Goal:
+    ${goal}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro', // Use Pro for better planning
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        steps: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    description: { type: Type.STRING },
+                                    duration: { type: Type.STRING },
+                                },
+                                required: ['title', 'description', 'duration']
+                            }
+                        },
+                    },
+                    required: ['steps']
+                }
+            }
+        });
+        const result = JSON.parse(response.text);
+        return result.steps;
+    } catch (error) {
+        console.error("Error generating roadmap:", error);
+        throw new Error("Failed to generate roadmap.");
     }
 };

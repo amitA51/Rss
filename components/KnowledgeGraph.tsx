@@ -24,10 +24,79 @@ interface KnowledgeGraphProps {
   onSelectItem: (item: FeedItem) => void;
 }
 
+// --- Simulation Constants ---
 const DAMPING = 0.95;
-const REPULSION = -300;
+const REPULSION_STRENGTH = -350;
 const LINK_STRENGTH = 0.05;
-const CENTER_STRENGTH = 0.02;
+const CENTER_STRENGTH = 0.01;
+const CLUSTER_STRENGTH = 0.05;
+
+// --- Physics Calculation Helpers for Readability ---
+const applyRepulsion = (nodes: Node[]) => {
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const nodeA = nodes[i];
+      const nodeB = nodes[j];
+      const dx = nodeB.x - nodeA.x;
+      const dy = nodeB.y - nodeA.y;
+      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = REPULSION_STRENGTH / (distance * distance);
+      const fx = (dx / distance) * force;
+      const fy = (dy / distance) * force;
+      nodeA.vx += fx;
+      nodeA.vy += fy;
+      nodeB.vx -= fx;
+      nodeB.vy -= fy;
+    }
+  }
+};
+
+const applyLinkForces = (nodes: Node[], links: Link[], nodeMap: Map<string, Node>, isClustered: boolean) => {
+  links.forEach(link => {
+    const source = nodeMap.get(link.source);
+    const target = nodeMap.get(link.target);
+    if (!source || !target) return;
+
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+    const force = (distance - (isClustered ? 80 : 100)) * LINK_STRENGTH;
+    const fx = (dx / distance) * force;
+    const fy = (dy / distance) * force;
+
+    source.vx += fx;
+    source.vy += fy;
+    target.vx -= fx;
+    target.vy -= fy;
+  });
+};
+
+const applyGravity = (nodes: Node[], { width, height }: { width: number, height: number }, clusterCenter: { x: number, y: number } | null, connectedNodeIds: Set<string>) => {
+    nodes.forEach(node => {
+        if (clusterCenter) { // Clustered mode
+            if (connectedNodeIds.has(node.id)) {
+                // Stronger pull towards cluster center
+                const dx = clusterCenter.x - node.x;
+                const dy = clusterCenter.y - node.y;
+                node.vx += dx * CLUSTER_STRENGTH;
+                node.vy += dy * CLUSTER_STRENGTH;
+            } else {
+                // Push unconnected nodes away
+                const dx = node.x - width / 2;
+                const dy = node.y - height / 2;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                node.vx += (dx / dist) * 0.1;
+                node.vy += (dy / dist) * 0.1;
+            }
+        } else { // Normal mode
+            const dx = width / 2 - node.x;
+            const dy = height / 2 - node.y;
+            node.vx += dx * CENTER_STRENGTH;
+            node.vy += dy * CENTER_STRENGTH;
+        }
+    });
+};
+
 
 const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,7 +151,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
   }, [items]);
   
   useEffect(() => {
-    const { width, height } = containerRef.current!.getBoundingClientRect();
+    if (!containerRef.current) return;
+    const { width, height } = containerRef.current.getBoundingClientRect();
     setDimensions({ width, height });
 
     setNodes(initialData.nodes.map(node => ({
@@ -93,72 +163,48 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
     setLinks(initialData.links);
 
   }, [initialData]);
+  
+  const connectedNodeIds = useMemo(() => {
+    if (!selectedTagId) return new Set<string>();
+    const connected = new Set([selectedTagId]);
+    links.forEach(link => {
+      if (link.source === selectedTagId) connected.add(link.target);
+      if (link.target === selectedTagId) connected.add(link.source);
+    });
+    return connected;
+  }, [selectedTagId, links]);
 
   const tick = useCallback(() => {
     setNodes(prevNodes => {
       const { width, height } = dimensions;
       if (width === 0) return prevNodes;
   
-      const mutableNodes = prevNodes.map(n => ({ ...n }));
+      const mutableNodes = prevNodes.map(n => ({ ...n, vx: n.id === draggedNodeId ? 0 : n.vx, vy: n.id === draggedNodeId ? 0 : n.vy }));
       const nodeMap: Map<string, Node> = new Map(mutableNodes.map(n => [n.id, n]));
-  
-      // Calculate and apply all forces to velocities.
-      // Forces are calculated based on the positions at the beginning of the tick (prevNodes).
-      mutableNodes.forEach(node => {
-        if (node.id === draggedNodeId) {
-          node.vx = 0;
-          node.vy = 0;
-          return;
-        }
-  
-        // Repulsion from other nodes
-        prevNodes.forEach(otherNode => {
-          if (node.id === otherNode.id) return;
-          const dx = otherNode.x - node.x;
-          const dy = otherNode.y - node.y;
-          const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = REPULSION / (distance * distance);
-          node.vx += (dx / distance) * force;
-          node.vy += (dy / distance) * force;
-        });
-  
-        // Gravity towards the center
-        const dxCenter = width / 2 - node.x;
-        const dyCenter = height / 2 - node.y;
-        node.vx += dxCenter * CENTER_STRENGTH;
-        node.vy += dyCenter * CENTER_STRENGTH;
-      });
-  
-      // Link forces
-      links.forEach(link => {
-        const source = nodeMap.get(link.source);
-        const target = nodeMap.get(link.target);
-        if (!source || !target) return;
-  
-        if (source.id === draggedNodeId || target.id === draggedNodeId) return;
-  
-        const dx = target.x - source.x;
-        const dy = target.y - source.y;
-        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (distance - 100) * LINK_STRENGTH;
-        const fx = (dx / distance) * force;
-        const fy = (dy / distance) * force;
-  
-        source.vx += fx;
-        source.vy += fy;
-        target.vx -= fx;
-        target.vy -= fy;
-      });
+      
+      let clusterCenter: { x: number, y: number } | null = null;
+      if (selectedTagId) {
+          const clusterNodes = mutableNodes.filter(n => connectedNodeIds.has(n.id));
+          if(clusterNodes.length > 0) {
+              clusterCenter = clusterNodes.reduce((acc, n) => ({ x: acc.x + n.x, y: acc.y + n.y }), { x: 0, y: 0 });
+              clusterCenter.x /= clusterNodes.length;
+              clusterCenter.y /= clusterNodes.length;
+          }
+      }
+
+      // Apply forces
+      applyRepulsion(mutableNodes);
+      applyLinkForces(mutableNodes, links, nodeMap, !!selectedTagId);
+      applyGravity(mutableNodes, dimensions, clusterCenter, connectedNodeIds);
   
       // Apply damping, update positions, and check boundaries
       return mutableNodes.map(node => {
         if (node.id !== draggedNodeId) {
           node.vx *= DAMPING;
           node.vy *= DAMPING;
+          node.x += node.vx;
+          node.y += node.vy;
         }
-  
-        node.x += node.vx;
-        node.y += node.vy;
   
         // Boundary collision
         if (node.x - node.radius < 0) { node.x = node.radius; node.vx = -node.vx * 0.5; }
@@ -171,7 +217,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
     });
   
     simulationRef.current = requestAnimationFrame(tick);
-  }, [links, dimensions, draggedNodeId]);
+  }, [links, dimensions, draggedNodeId, selectedTagId, connectedNodeIds]);
 
   useEffect(() => {
     simulationRef.current = requestAnimationFrame(tick);
@@ -218,16 +264,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
   const handleMouseUp = () => {
     setDraggedNodeId(null);
   };
-
-  const connectedNodeIds = useMemo(() => {
-    if (!selectedTagId) return new Set();
-    const connected = new Set([selectedTagId]);
-    links.forEach(link => {
-      if (link.source === selectedTagId) connected.add(link.target);
-      if (link.target === selectedTagId) connected.add(link.source);
-    });
-    return connected;
-  }, [selectedTagId, links]);
 
   return (
     <div 
@@ -277,7 +313,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ items, onSelectItem }) 
                     <g 
                         key={node.id} 
                         transform={`translate(${node.x},${node.y})`}
-                        className="graph-node"
+                        className={`graph-node ${isFocused ? 'focused' : ''}`}
                         style={{ 
                             opacity: selectedTagId ? (isConnected ? 1 : 0.3) : 1,
                             cursor: 'pointer'

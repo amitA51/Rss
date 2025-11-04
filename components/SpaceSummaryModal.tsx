@@ -1,0 +1,45 @@
+import React from 'react';
+import { CloseIcon, SparklesIcon } from './icons';
+import MarkdownRenderer from './MarkdownRenderer';
+
+interface SpaceSummaryModalProps {
+  summary: string | null;
+  onClose: () => void;
+  isLoading: boolean;
+  spaceName: string;
+}
+
+const SpaceSummaryModal: React.FC<SpaceSummaryModalProps> = ({ summary, onClose, isLoading, spaceName }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-[var(--bg-secondary)] w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col transform animate-modal-expand-in border-t border-[var(--border-primary)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm z-10">
+          <h2 className="text-xl font-bold themed-title flex items-center gap-2">
+            <SparklesIcon className="w-6 h-6" />
+            סיכום AI עבור "{spaceName}"
+          </h2>
+          <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95">
+            <CloseIcon className="h-6 w-6" />
+          </button>
+        </header>
+        
+        <div className="p-6 overflow-y-auto flex-grow">
+          {isLoading ? (
+            <div className="flex flex-col justify-center items-center h-full text-center text-[var(--text-secondary)]">
+              <div className="w-2 h-2 bg-[var(--dynamic-accent-start)] rounded-full animate-pulse mb-4"></div>
+              <p>הבינה המלאכותית מנתחת את התוכן במרחב...</p>
+              <p className="text-xs text-gray-600">זה עשוי לקחת מספר רגעים.</p>
+            </div>
+          ) : (
+             <MarkdownRenderer content={summary || ''} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SpaceSummaryModal;

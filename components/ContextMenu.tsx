@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { FeedItem } from '../types';
-import { ReadIcon, UnreadIcon, SummarizeIcon, ClipboardIcon, TrashIcon } from './icons';
+import { ReadIcon, UnreadIcon, SummarizeIcon, ClipboardIcon, TrashIcon, BookOpenIcon } from './icons';
 
 interface ContextMenuProps {
   x: number;
@@ -10,9 +10,10 @@ interface ContextMenuProps {
   onToggleRead: () => void;
   onSummarize: () => void;
   onDelete?: (id: string) => void;
+  onAddToLibrary: (item: FeedItem) => void;
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, item, onClose, onToggleRead, onSummarize, onDelete }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, item, onClose, onToggleRead, onSummarize, onDelete, onAddToLibrary }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x, y });
 
@@ -65,6 +66,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, item, onClose, onToggle
       action: () => handleAction(onSummarize),
       disabled: !!item.summary_ai,
     },
+    ...(item.type === 'rss' ? [{
+        label: 'הוסף לספרייה',
+        icon: <BookOpenIcon className="h-5 w-5"/>,
+        action: () => handleAction(() => onAddToLibrary(item)),
+    }] : []),
     ...(item.link ? [{
       label: 'העתק קישור',
       icon: <ClipboardIcon className="h-5 w-5" />,
@@ -84,7 +90,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, item, onClose, onToggle
       <div
         ref={menuRef}
         style={{ top: position.y, left: position.x }}
-        className="fixed z-50 w-56 bg-gray-900/80 backdrop-blur-xl border border-[var(--border-color)] rounded-lg shadow-2xl animate-fade-in-up-fast"
+        className="fixed z-50 w-56 bg-[var(--bg-card)]/80 backdrop-blur-xl border border-[var(--border-primary)] rounded-lg shadow-2xl animate-fade-in-up-fast"
       >
         <style>{`
           @keyframes fade-in-up-fast {
@@ -101,7 +107,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, item, onClose, onToggle
                 onClick={menuItem.action}
                 disabled={!!menuItem.disabled}
                 className={`w-full flex items-center gap-3 text-right px-3 py-2 text-sm rounded-md transition-colors
-                  ${menuItem.isDestructive ? 'text-red-400 hover:bg-red-500/10' : 'text-gray-200 hover:bg-blue-600/20'}
+                  ${menuItem.isDestructive ? 'text-red-400 hover:bg-red-500/10' : 'text-gray-200 hover:bg-white/10'}
                   disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
               >
                 {menuItem.icon}

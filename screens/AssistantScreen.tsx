@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getAllItems, createAssistantChat } from '../services/geminiService';
-import type { FeedItem } from '../types';
+import type { Screen } from '../types';
+import { createAssistantChat } from '../services/geminiService';
 import type { Chat } from '@google/genai';
-import { SendIcon } from '../components/icons';
+import { SendIcon, SettingsIcon } from '../components/icons';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 
 interface Message {
@@ -11,7 +11,11 @@ interface Message {
   text: string;
 }
 
-const AssistantScreen: React.FC = () => {
+interface AssistantScreenProps {
+    setActiveScreen: (screen: Screen) => void;
+}
+
+const AssistantScreen: React.FC<AssistantScreenProps> = ({ setActiveScreen }) => {
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -21,18 +25,15 @@ const AssistantScreen: React.FC = () => {
   useEffect(() => {
     const initChat = async () => {
       try {
-        const allItems = await getAllItems();
-        const chatSession = createAssistantChat(allItems);
+        const chatSession = await createAssistantChat();
         setChat(chatSession);
         
-        // The createAssistantChat function now includes the introductory message in its history.
         const initialHistory = (await chatSession.getHistory()).map((h, i) => ({
              id: `initial-${i}`,
              role: h.role as 'user' | 'model',
              text: h.parts[0].text || ''
         }));
         
-        // We only want to show the model's welcome message, not the context prompt.
         const modelMessages = initialHistory.filter(m => m.role === 'model');
         if (modelMessages.length > 0) {
            setMessages(modelMessages);
@@ -61,7 +62,7 @@ const AssistantScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-        const stream = await chat.sendMessageStream(userMessage.text);
+        const stream = await chat.sendMessageStream({ message: userMessage.text });
 
         let modelResponse = '';
         const modelMessageId = `model-${Date.now()}`;
@@ -88,30 +89,39 @@ const AssistantScreen: React.FC = () => {
 
   const TypingIndicator = () => (
     <div className="flex items-center space-x-1 p-3">
-        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+        <div className="w-2 h-2 bg-[var(--accent-start)] rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+        <div className="w-2 h-2 bg-[var(--accent-start)] rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+        <div className="w-2 h-2 bg-[var(--accent-start)] rounded-full animate-pulse"></div>
     </div>
   );
 
   return (
-    <div className="pt-4 flex flex-col h-[calc(100vh-80px)]">
-      <header className="mb-4 -mx-4 px-4">
-        <h1 className="text-3xl font-bold text-gray-100">יועץ אישי</h1>
-        <p className="text-sm text-gray-400 mt-1">שאל שאלות על הספארקים והפידים שלך</p>
+    <div className="pt-4 flex flex-col h-[calc(100vh-80px)] px-4">
+      <header className="flex justify-between items-center mb-4 px-4 sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 border-b border-[var(--border-primary)] -mx-4">
+        <div>
+            <h1 className="text-3xl font-bold text-white">יועץ אישי</h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">שאל שאלות על הספארקים והפידים שלך</p>
+        </div>
+         <button 
+            onClick={() => setActiveScreen('settings')}
+            className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors"
+            aria-label="הגדרות"
+        >
+            <SettingsIcon className="w-6 h-6"/>
+        </button>
       </header>
       
-      <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-4 pb-4">
+      <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-6 pb-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-xl p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-lg' : 'bg-gray-800 text-gray-200 rounded-bl-lg'}`}>
+            <div className={`max-w-xl p-4 rounded-3xl shadow-md ${msg.role === 'user' ? 'bg-[var(--bg-card)] text-white rounded-br-lg' : 'bg-[var(--bg-secondary)] text-gray-200 rounded-bl-lg'}`}>
                <MarkdownRenderer content={msg.text} />
             </div>
           </div>
         ))}
          {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
             <div className="flex justify-start">
-                <div className="bg-gray-800 rounded-2xl rounded-bl-lg">
+                <div className="bg-[var(--bg-secondary)] rounded-3xl rounded-bl-lg">
                     <TypingIndicator/>
                 </div>
             </div>
@@ -119,24 +129,24 @@ const AssistantScreen: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="mt-auto pt-2 pb-1 border-t border-[var(--border-color)] bg-gray-900/50 backdrop-blur-sm -mx-4 px-4">
-        <div className="flex items-center space-x-2">
+      <div className="mt-auto pt-4 pb-2 bg-[var(--bg-primary)]">
+        <div className="flex items-center space-x-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-full p-2 shadow-lg">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="שאל את Sparky..."
-            className="flex-1 w-full bg-gray-800 border border-gray-700 text-gray-200 rounded-full p-3 px-5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
+            placeholder="הקלד כאן..."
+            className="flex-1 w-full bg-transparent text-white py-2 px-3 focus:outline-none"
             disabled={isLoading}
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            className="bg-blue-600 hover:bg-blue-500 text-white rounded-full p-3 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all transform hover:scale-110 active:scale-95"
+            className="bg-[var(--accent-gradient)] text-white rounded-full p-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-110 active:scale-95"
             aria-label="שלח הודעה"
           >
-            <SendIcon className="h-6 w-6" />
+            <SendIcon className="h-5 w-5 -rotate-45" />
           </button>
         </div>
       </div>

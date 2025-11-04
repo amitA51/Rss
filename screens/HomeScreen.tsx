@@ -1,134 +1,424 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { PersonalItem } from '../types';
-import { getPersonalItems, updatePersonalItem, removePersonalItem } from '../services/geminiService';
+import React, { useState, useCallback, useContext, useMemo, useRef } from 'react';
+import type { PersonalItem, HomeScreenComponent, Screen, HomeScreenComponentId } from '../types';
 import TaskItem from '../components/TaskItem';
 import HabitItem from '../components/HabitItem';
-import PersonalItemCard from '../components/PersonalItemCard';
 import PersonalItemDetailModal from '../components/PersonalItemDetailModal';
-import { FileIcon } from '../components/icons';
+import PersonalItemContextMenu from '../components/PersonalItemContextMenu';
+import DailyBriefingModal from '../components/DailyBriefingModal';
+import GratitudeTracker from '../components/GratitudeTracker';
+import QuickAddTask from '../components/QuickAddTask';
+import DailyProgressCircle from '../components/DailyProgressCircle';
+import { SettingsIcon, SparklesIcon, DragHandleIcon, EyeIcon, EyeOffIcon, CheckSquareIcon, StopwatchIcon } from '../components/icons';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { AppContext } from '../state/AppContext';
+import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, rollOverIncompleteTasks, reAddPersonalItem } from '../services/dataService';
+import { saveSettings } from '../services/settingsService';
+import { generateDailyBriefing } from '../services/geminiService';
+import { useTodayItems } from '../hooks/useTodayItems';
+import { useContextMenu } from '../hooks/useContextMenu';
+import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
 
-type FilterType = 'all' | PersonalItem['type'];
-
-const FilterButton: React.FC<{
-  label: string;
-  filterType: FilterType;
-  currentFilter: FilterType;
-  setFilter: (filter: FilterType) => void;
-}> = ({ label, filterType, currentFilter, setFilter }) => (
-  <button
-      onClick={() => setFilter(filterType)}
-      className={`px-4 py-2 text-sm rounded-full transition-all shrink-0 transform hover:scale-105 active:scale-95 font-semibold ${
-          currentFilter === filterType 
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
-          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-      }`}
-  >
-      {label}
-  </button>
-);
-
-const renderItem = (item: PersonalItem, onUpdate: any, onDelete: any, onSelect: any) => {
-    switch (item.type) {
-        case 'task':
-            return <TaskItem key={item.id} item={item} onUpdate={onUpdate} onDelete={onDelete} onSelect={onSelect} />;
-        case 'habit':
-            return <HabitItem key={item.id} item={item} onUpdate={onUpdate} onDelete={onDelete} onSelect={onSelect} />;
-        default:
-            return <PersonalItemCard key={item.id} item={item} onDelete={onDelete} onSelect={onSelect} />;
-    }
+interface HomeScreenProps {
+    setActiveScreen: (screen: Screen) => void;
 }
 
-const HomeScreen: React.FC = () => {
-    const [personalItems, setPersonalItems] = useState<PersonalItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [filter, setFilter] = useState<FilterType>('all');
-    const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
-
-    const loadData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const pItems = await getPersonalItems();
-            setPersonalItems(pItems);
-        } catch (error) {
-            console.error("Error fetching personal items:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        loadData();
-    }, [loadData]);
-    
-    const handleUpdatePersonalItem = async (id: string, updates: Partial<PersonalItem>) => {
-        const originalItems = [...personalItems];
-        const updatedItem = { ...personalItems.find(item => item.id === id)!, ...updates };
-        setPersonalItems(prev => prev.map(item => item.id === id ? updatedItem : item));
-        if (selectedItem?.id === id) {
-            setSelectedItem(updatedItem);
-        }
-        try {
-            await updatePersonalItem(id, updates);
-        } catch (error) {
-            console.error("Failed to update item:", error);
-            setPersonalItems(originalItems);
-        }
-    };
-
-    const handleDeletePersonalItem = async (id: string) => {
-        if (!window.confirm("האם למחוק את הפריט?")) return;
-        
-        const originalItems = [...personalItems];
-        setPersonalItems(prev => prev.filter(item => item.id !== id));
-        try {
-            await removePersonalItem(id);
-        } catch (error) {
-            alert("שגיאה במחיקת הפריט.");
-            setPersonalItems(originalItems);
-        }
-    };
-
-    const filteredItems = useMemo(() => {
-        if (filter === 'all') return personalItems;
-        return personalItems.filter(item => item.type === filter);
-    }, [personalItems, filter]);
-
-    if (isLoading) {
-        return <div className="text-center text-gray-400 pt-16">טוען...</div>;
-    }
+const Section: React.FC<{
+    title: string;
+    children: React.ReactNode;
+    count: number;
+    isCollapsible: boolean;
+    isExpanded: boolean;
+    onToggle: () => void;
+    className?: string;
+    componentId: HomeScreenComponentId | 'completed';
+}> = ({ title, children, count, isCollapsible, isExpanded, onToggle, className, componentId }) => {
+    if (count === 0 && componentId !== 'gratitude') return null;
 
     return (
-        <div className="pt-4 pb-8 space-y-6">
-            <h1 className="text-3xl font-bold text-gray-100">אישי</h1>
-            
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4" style={{'scrollbarWidth': 'none'}}>
-                <FilterButton label="הכל" filterType="all" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="משימות" filterType="task" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="הרגלים" filterType="habit" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="ספרים" filterType="book" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="פתקים" filterType="note" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="קישורים" filterType="link" currentFilter={filter} setFilter={setFilter} />
-                <FilterButton label="למידה" filterType="learning" currentFilter={filter} setFilter={setFilter} />
+        <section className={className}>
+            <div 
+                className="flex justify-between items-center mb-3 px-1"
+                onClick={isCollapsible ? onToggle : undefined}
+                style={{ cursor: isCollapsible ? 'pointer' : 'default' }}
+            >
+                <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">{title}</h2>
+                {isCollapsible && (
+                     <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                        <span className="text-xs font-mono">{count}</span>
+                        <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
+                )}
             </div>
+            {isExpanded && <div className="space-y-3">{children}</div>}
+        </section>
+    );
+};
 
-            {filteredItems.length > 0 ? (
-                <div className="space-y-4">
-                    {filteredItems.map(item => renderItem(item, handleUpdatePersonalItem, handleDeletePersonalItem, setSelectedItem))}
+
+const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
+    const { state, dispatch } = useContext(AppContext);
+    const { isLoading, settings, personalItems } = state;
+    const { todaysHabits, openTasks } = useTodayItems();
+    const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<PersonalItem>();
+
+    const [layout, setLayout] = useState<HomeScreenComponent[]>(settings.homeScreenLayout);
+    const [focusMode, setFocusMode] = useState(false);
+    const [collapsedSections, setCollapsedSections] = useState<Array<HomeScreenComponentId | 'completed'>>(['tasks', 'completed']);
+
+    const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
+    const [isBriefingLoading, setIsBriefingLoading] = useState(false);
+    const [briefingContent, setBriefingContent] = useState('');
+    const [celebrateHabits, setCelebrateHabits] = useState(false);
+    const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
+
+    // State for SECTION dragging
+    const dragItem = useRef<number | null>(null);
+    const dragOverItem = useRef<number | null>(null);
+    const [dragging, setDragging] = useState(false);
+
+    // State for TASK dragging
+    const dragTask = useRef<PersonalItem | null>(null);
+    const dragOverTask = useRef<PersonalItem | null>(null);
+    const [draggingTask, setDraggingTask] = useState(false);
+
+    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
+        setStatusMessage({ type, text, id: Date.now(), onUndo });
+    };
+
+    const handleDrop = () => {
+        if (dragItem.current !== null && dragOverItem.current !== null) {
+            const newLayout = [...layout];
+            const dragItemContent = newLayout[dragItem.current];
+            newLayout.splice(dragItem.current, 1);
+            newLayout.splice(dragOverItem.current, 0, dragItemContent);
+            setLayout(newLayout);
+            saveSettings({ ...settings, homeScreenLayout: newLayout });
+            dispatch({ type: 'SET_SETTINGS', payload: { ...settings, homeScreenLayout: newLayout } });
+        }
+        dragItem.current = null;
+        dragOverItem.current = null;
+        setDragging(false);
+    };
+
+    const handleToggleCollapse = (id: HomeScreenComponentId | 'completed') => {
+        setCollapsedSections(prev => 
+            prev.includes(id) ? prev.filter(sectionId => sectionId !== id) : [...prev, id]
+        );
+    };
+
+    const handleSelectItem = useCallback((item: PersonalItem, event: React.MouseEvent) => {
+        event.stopPropagation();
+        setSelectedItem(item)
+    }, []);
+
+    const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
+        const originalItem = personalItems.find(item => item.id === id);
+        if (!originalItem) return;
+
+        // Optimistic UI update
+        dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates } });
+        if (selectedItem?.id === id) {
+            setSelectedItem(prev => prev ? { ...prev, ...updates } : null);
+        }
+
+        try {
+            await updatePersonalItem(id, updates);
+
+            // Habit celebration logic after successful update
+            const updatedItem = { ...originalItem, ...updates };
+            if (updatedItem.type === 'habit' && updates.lastCompleted) {
+                const allHabits = personalItems.filter(i => i.type === 'habit');
+                if (allHabits.length > 0 && allHabits.every(h => {
+                    const lastCompleted = (h.id === id) ? updates.lastCompleted : h.lastCompleted;
+                    if (!lastCompleted) return false;
+                    return new Date(lastCompleted).toDateString() === new Date().toDateString();
+                })) {
+                    setCelebrateHabits(true);
+                    setTimeout(() => setCelebrateHabits(false), 3000);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to update item:", error);
+            // Rollback on failure
+            dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates: originalItem } });
+            if (selectedItem?.id === id) {
+                setSelectedItem(originalItem);
+            }
+            showStatus('error', 'שגיאה בעדכון הפריט.');
+        }
+    }, [dispatch, selectedItem, personalItems]);
+    
+    const handleDeleteItem = useCallback(async (id: string) => {
+        const itemToDelete = personalItems.find(item => item.id === id);
+        if (!itemToDelete) return;
+
+        if (window.navigator.vibrate) window.navigator.vibrate(50);
+        
+        await removePersonalItem(id);
+        dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
+
+        showStatus('success', 'הפריט נמחק.', async () => {
+            // FIX: Added `await` to the async undo action to ensure it completes before potential subsequent actions.
+            await reAddPersonalItem(itemToDelete);
+            dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
+        });
+    }, [dispatch, personalItems]);
+
+    const handleDuplicateItem = useCallback(async (id: string) => {
+        const newItem = await duplicatePersonalItem(id);
+        dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newItem });
+        showStatus('success', 'הפריט שוכפל');
+    }, [dispatch]);
+
+    const handleStartFocus = useCallback((item: PersonalItem) => {
+        dispatch({ type: 'START_FOCUS_SESSION', payload: item });
+        showStatus('success', `סשן פוקוס התחיל עבור: ${item.title}`);
+    }, [dispatch]);
+
+    const handleStartGlobalFocus = () => {
+        // find the first task in the sorted list
+        if (openTasks.length > 0) {
+            handleStartFocus(openTasks[0]);
+        } else {
+            showStatus('success', 'אין משימות פתוחות להתמקד בהן.');
+        }
+    };
+
+    const handleGetBriefing = async () => {
+        if (isBriefingLoading) return;
+        setIsBriefingLoading(true);
+        setBriefingContent('');
+        try {
+            const gratitudeItem = personalItems.find(item => item.type === 'gratitude' && new Date(item.createdAt).toDateString() === new Date().toDateString());
+            const briefing = await generateDailyBriefing(openTasks.slice(0,3), todaysHabits, gratitudeItem?.content || null);
+            setBriefingContent(briefing);
+        } catch (error) {
+            console.error(error);
+            setBriefingContent("שגיאה בעת יצירת התדריך. אנא נסה שוב.");
+        } finally {
+            setIsBriefingLoading(false);
+        }
+    };
+
+    const handleRollOverTasks = async () => {
+        const updates = await rollOverIncompleteTasks();
+        if (updates.length > 0) {
+            updates.forEach(update => {
+                dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: update });
+            });
+            showStatus('success', `גלגלת ${updates.length} משימות להיום.`);
+        } else {
+            showStatus('success', 'אין משימות לגלגל.');
+        }
+    };
+    
+    const handleTaskDrop = () => {
+        if (!dragTask.current || !dragOverTask.current || dragTask.current.id === dragOverTask.current.id) {
+            setDraggingTask(false);
+            return;
+        }
+    
+        const tasks = openTasks;
+        const dragItemIndex = tasks.findIndex(i => i.id === dragTask.current!.id);
+        const dragOverItemIndex = tasks.findIndex(i => i.id === dragOverTask.current!.id);
+    
+        if (dragItemIndex === -1 || dragOverItemIndex === -1) return;
+    
+        let newCreatedAt: string;
+    
+        if (dragItemIndex > dragOverItemIndex) { // Moving UP
+            const prevItem = tasks[dragOverItemIndex - 1];
+            const nextItem = tasks[dragOverItemIndex];
+            const nextItemTime = new Date(nextItem.createdAt).getTime();
+            if (prevItem) {
+                const prevItemTime = new Date(prevItem.createdAt).getTime();
+                newCreatedAt = new Date((prevItemTime + nextItemTime) / 2).toISOString();
+            } else {
+                newCreatedAt = new Date(nextItemTime + 1000).toISOString();
+            }
+        } else { // Moving DOWN
+            const prevItem = tasks[dragOverItemIndex];
+            const nextItem = tasks[dragOverItemIndex + 1];
+            const prevItemTime = new Date(prevItem.createdAt).getTime();
+            if (nextItem) {
+                const nextItemTime = new Date(nextItem.createdAt).getTime();
+                newCreatedAt = new Date((prevItemTime + nextItemTime) / 2).toISOString();
+            } else {
+                newCreatedAt = new Date(prevItemTime - 1000).toISOString();
+            }
+        }
+    
+        handleUpdateItem(dragTask.current.id, { createdAt: newCreatedAt });
+    
+        setDraggingTask(false);
+        dragTask.current = null;
+        dragOverTask.current = null;
+    };
+
+    const { completionPercentage, overdueTasksCount, completedTodayTasks } = useMemo(() => {
+        const allHabits = personalItems.filter(i => i.type === 'habit');
+        const habitsCompletedToday = allHabits.filter(h => h.lastCompleted && new Date(h.lastCompleted).toDateString() === new Date().toDateString()).length;
+        
+        const allTasks = personalItems.filter(i => i.type === 'task');
+        const tasksCompleted = allTasks.filter(t => t.isCompleted).length;
+        
+        const totalItems = allHabits.length + allTasks.length;
+        const totalCompleted = habitsCompletedToday + tasksCompleted;
+        const percentage = totalItems > 0 ? (totalCompleted / totalItems) * 100 : 0;
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const overdue = allTasks.filter(t => !t.isCompleted && t.dueDate && new Date(t.dueDate) < today).length;
+
+        const completedToday = allTasks.filter(t => t.isCompleted && t.lastCompleted && new Date(t.lastCompleted).toDateString() === today.toDateString());
+
+        return { completionPercentage: percentage, overdueTasksCount: overdue, completedTodayTasks: completedToday };
+    }, [personalItems]);
+    
+    const todayDate = new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    const componentsMap: Record<HomeScreenComponentId, React.ReactNode> = {
+        gratitude: <GratitudeTracker />,
+        habits: todaysHabits.map((item, index) => <HabitItem key={item.id} index={index} item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} isCelebrationActive={celebrateHabits} onContextMenu={handleContextMenu} />),
+        tasks: (
+            <>
+                {openTasks.map((item, index) => (
+                    <div
+                        key={item.id}
+                        draggable
+                        onDragStart={() => { dragTask.current = item; setDraggingTask(true); }}
+                        onDragEnter={() => { dragOverTask.current = item; }}
+                        onDragEnd={handleTaskDrop}
+                        onDragOver={(e) => e.preventDefault()}
+                        className={`transition-opacity duration-300 ${draggingTask && dragTask.current?.id === item.id ? 'dragging-item' : ''} cursor-grab`}
+                    >
+                        <TaskItem 
+                            item={item} 
+                            onUpdate={handleUpdateItem} 
+                            onDelete={handleDeleteItem} 
+                            onSelect={handleSelectItem} 
+                            onContextMenu={handleContextMenu}
+                            onStartFocus={handleStartFocus}
+                            index={index} 
+                        />
+                    </div>
+                ))}
+            </>
+        ),
+    };
+
+    const componentMeta: Record<HomeScreenComponentId, { title: string; count: number; isCollapsible: boolean; isNonEssential?: boolean }> = {
+        gratitude: { title: settings.sectionLabels.gratitude, count: 1, isCollapsible: false, isNonEssential: true },
+        habits: { title: settings.sectionLabels.habits, count: todaysHabits.length, isCollapsible: true },
+        tasks: { title: settings.sectionLabels.tasks, count: openTasks.length, isCollapsible: true },
+    };
+
+    return (
+        <div className={`pt-4 pb-8 space-y-8 transition-all duration-300 ${focusMode ? 'focus-mode' : ''}`}>
+            <header className="sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 -mx-4 px-4">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <DailyProgressCircle percentage={completionPercentage} />
+                        <div>
+                            <h1 className="text-3xl font-bold themed-title">{settings.screenLabels?.today || 'היום'}</h1>
+                            <p className="text-sm text-[var(--dynamic-accent-end)] opacity-90">{todayDate}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setFocusMode(!focusMode)} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                            {focusMode ? <EyeOffIcon className="w-6 h-6"/> : <EyeIcon className="w-6 h-6"/>}
+                        </button>
+                         <button onClick={handleStartGlobalFocus} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors" aria-label="התחל סשן פוקוס כללי">
+                            <StopwatchIcon className="w-6 h-6"/>
+                        </button>
+                        <button onClick={handleGetBriefing} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                            <SparklesIcon className="w-6 h-6"/>
+                        </button>
+                        <button onClick={() => setActiveScreen('settings')} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                            <SettingsIcon className="w-6 h-6"/>
+                        </button>
+                    </div>
                 </div>
-            ) : (
-                <div className="text-center text-gray-500 mt-16 flex flex-col items-center">
-                    <FileIcon className="w-16 h-16 text-gray-700 mb-4"/>
-                    <p className="max-w-xs">
-                        {personalItems.length > 0 ? "אין פריטים התואמים לסינון זה." : "אין פריטים אישיים. הוסף פריט חדש!"}
-                    </p>
-                </div>
+            </header>
+            
+            <QuickAddTask onTaskAdded={() => showStatus('success', 'המשימה נוספה')} />
+
+            {isLoading ? <SkeletonLoader count={5} /> : (
+                <>
+                    {layout.map((component, index) => {
+                        if (!component.isVisible) return null;
+                        const meta = componentMeta[component.id];
+                        return (
+                            <div
+                                key={component.id}
+                                draggable
+                                onDragStart={() => { dragItem.current = index; setDragging(true); }}
+                                onDragEnter={() => dragOverItem.current = index}
+                                onDragEnd={handleDrop}
+                                onDragOver={(e) => e.preventDefault()}
+                                className={`transition-all duration-300 ${dragging && dragItem.current === index ? 'dragging-item' : ''}`}
+                            >
+                                {dragging && dragItem.current === dragOverItem.current && <div className="dragging-placeholder mb-4"></div>}
+                                <div className="flex items-start gap-2">
+                                    <div className="pt-2 cursor-grab text-[var(--text-secondary)]/50 hover:text-white"><DragHandleIcon className="w-5 h-5"/></div>
+                                    <div className="flex-1">
+                                        <Section
+                                            componentId={component.id}
+                                            title={meta.title}
+                                            count={meta.count}
+                                            isCollapsible={meta.isCollapsible}
+                                            isExpanded={!collapsedSections.includes(component.id)}
+                                            onToggle={() => handleToggleCollapse(component.id)}
+                                            className={meta.isNonEssential ? 'non-essential-section' : ''}
+                                        >
+                                            {componentsMap[component.id]}
+                                        </Section>
+                                        
+                                        {component.id === 'tasks' && openTasks.length === 0 && !collapsedSections.includes('tasks') && <p className="text-center text-sm text-[var(--text-secondary)] py-4">אין משימות להיום. כל הכבוד!</p>}
+                                        
+                                        {component.id === 'tasks' && overdueTasksCount > 0 && !collapsedSections.includes('tasks') && (
+                                            <button onClick={handleRollOverTasks} className="mt-4 text-sm w-full flex items-center justify-center gap-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent-start)] text-[var(--accent-highlight)] font-semibold py-2 px-4 rounded-xl transition-colors">
+                                                <CheckSquareIcon className="w-5 h-5"/>
+                                                גלגל {overdueTasksCount} משימות שעבר זמנן
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                     {/* Completed Tasks Section */}
+                    <Section
+                        componentId="completed"
+                        title="הושלמו היום"
+                        count={completedTodayTasks.length}
+                        isCollapsible={true}
+                        isExpanded={!collapsedSections.includes('completed')}
+                        onToggle={() => handleToggleCollapse('completed')}
+                        className="pl-8"
+                    >
+                        {completedTodayTasks.map((item, index) => (
+                             <TaskItem 
+                                key={item.id}
+                                item={item} 
+                                onUpdate={handleUpdateItem} 
+                                onDelete={handleDeleteItem} 
+                                onSelect={handleSelectItem} 
+                                onContextMenu={handleContextMenu}
+                                onStartFocus={handleStartFocus}
+                                index={index} 
+                            />
+                        ))}
+                    </Section>
+                </>
             )}
             
-            <PersonalItemDetailModal
-                item={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                onUpdate={handleUpdatePersonalItem}
-            />
+            <PersonalItemDetailModal item={selectedItem} onClose={(nextItem) => setSelectedItem(nextItem || null)} onUpdate={handleUpdateItem} />
+            {contextMenu.isOpen && contextMenu.item && <PersonalItemContextMenu x={contextMenu.x} y={contextMenu.y} item={contextMenu.item} onClose={closeContextMenu} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onDuplicate={handleDuplicateItem} onStartFocus={handleStartFocus} />}
+            {(isBriefingLoading || briefingContent) && <DailyBriefingModal isLoading={isBriefingLoading} briefingContent={briefingContent} onClose={() => setBriefingContent('')} />}
+            {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}
         </div>
     );
 };

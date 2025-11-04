@@ -8,132 +8,393 @@
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon.svg">
+    <meta name="application-name" content="Spark">
+    <meta name="apple-mobile-web-app-title" content="Spark">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#050509">
+    <meta name="theme-color" content="#101010">
     
     <title>Spark</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Lato:wght@300;400;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       :root {
-        --glow-color-blue: rgba(59, 130, 246, 0.6);
-        --glow-color-purple: rgba(139, 92, 246, 0.6);
-        --bg-color: #050509;
-        --border-color: rgba(255, 255, 255, 0.1);
-        --border-color-hover: rgba(59, 130, 246, 0.5);
+        /* New, higher-contrast, neutral dark theme for better readability */
+        --bg-primary: #101010;
+        --bg-secondary: #1C1C1C;
+        --bg-card: #242424;
+        --text-primary: #F0F0F0;
+        --text-secondary: #A8A8A8;
+        --border-primary: rgba(255, 255, 255, 0.08);
+
+        /* Fallback static colors (neutral gray to avoid color bleed) */
+        --accent-start: #6B7280; /* gray-500 */
+        --accent-end: #9CA3AF; /* gray-400 */
+        --accent-highlight: #D1D5DB; /* gray-300 */
+        --accent-glow: rgba(107, 114, 128, 0.3); /* Increased glow opacity */
+
+        /* New Dynamic Theme Vars */
+        --font-primary: 'Inter', sans-serif;
+        --dynamic-accent-start: var(--accent-start);
+        --dynamic-accent-end: var(--accent-end);
+        --dynamic-accent-highlight: var(--accent-highlight);
+        --dynamic-accent-glow: var(--accent-glow);
+        --dynamic-accent-color: rgba(107, 114, 128, 0.08);
+        --accent-gradient: linear-gradient(90deg, var(--dynamic-accent-start), var(--dynamic-accent-end));
+
+        --danger: #F87171;
+        --warning: #FBBF24;
+        --success: #4ADE80;
+
+        /* Fi Standard */
+        --fi-cubic-bezier: cubic-bezier(0.16, 1, 0.3, 1);
       }
+      
+      .font-lato { --font-primary: 'Lato', sans-serif; }
+      .font-source-code-pro { --font-primary: 'Source Code Pro', monospace; }
+      .font-inter { --font-primary: 'Inter', sans-serif; }
 
       body {
-        font-family: 'Assistant', sans-serif;
-        background-color: var(--bg-color);
+        font-family: var(--font-primary);
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
         position: relative;
         overflow-x: hidden;
+        line-height: 1.6;
+        transition: background-color 0.5s ease-out;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.5); /* Lift text off background */
+      }
+      
+      body.with-mouse-highlight {
+         background-image: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 0%), var(--dynamic-accent-color, rgba(198, 124, 62, 0.08)), transparent 35%);
+         background-repeat: no-repeat;
       }
 
-      .gradient-bg {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: -1;
-        overflow: hidden;
+      /* Consistent Focus Ring with Glow */
+      *:focus-visible {
+        outline: 2px solid var(--dynamic-accent-start);
+        outline-offset: 2px;
+        border-radius: 6px;
+        box-shadow: 0 0 12px var(--dynamic-accent-glow);
+      }
+      
+      input:focus-visible, textarea:focus-visible, select:focus-visible {
+         outline: none;
       }
 
-      .gradient-ball {
-        position: absolute;
-        border-radius: 100%;
-        opacity: 0.5;
-        filter: blur(100px);
-      }
-
-      .b1 {
-        width: 40vmax;
-        height: 40vmax;
-        background-color: var(--glow-color-blue);
-        animation: move 25s infinite alternate;
-      }
-      .b2 {
-        width: 30vmax;
-        height: 30vmax;
-        background-color: var(--glow-color-purple);
-        animation: move 30s infinite alternate-reverse;
-      }
-       .b3 {
-        width: 25vmax;
-        height: 25vmax;
-        background-color: #334155;
-        animation: move 20s infinite alternate;
-      }
-
-      @keyframes move {
-        0% { transform: translate(5vw, -10vh) scale(1); }
-        50% { transform: translate(30vw, 40vh) scale(1.2); }
-        100% { transform: translate(-20vw, 10vh) scale(0.9); }
-      }
-
-      /* Custom scrollbar for a premium feel */
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(107, 114, 128, 0.5); /* gray-500 with opacity */
+        background: var(--dynamic-accent-end);
         border-radius: 3px;
+        opacity: 0.6;
+        transition: opacity 0.2s;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: rgba(156, 163, 175, 0.7); /* gray-400 with opacity */
+        opacity: 0.9;
       }
       
       /* For prose content from Markdown */
       .prose-custom ul {
         list-style-position: inside;
         padding-right: 1rem;
+        list-style-type: disc;
       }
       .prose-custom h1, .prose-custom h2, .prose-custom h3 {
         margin-bottom: 0.5em;
         margin-top: 1em;
+        color: var(--text-primary);
+        font-weight: 700; /* Crisper titles */
+        text-shadow: 0 0 10px var(--dynamic-accent-glow);
+      }
+       .prose-custom h1 { font-size: 1.875rem; }
+       .prose-custom h2 { font-size: 1.5rem; }
+       .prose-custom h3 { font-size: 1.25rem; }
+      .prose-custom a {
+        color: var(--dynamic-accent-highlight);
+        text-decoration: none;
+        border-bottom: 1px solid var(--dynamic-accent-start);
+      }
+      .prose-custom a:hover {
+        color: #FFFFFF;
+        border-bottom-color: var(--dynamic-accent-end);
+        text-shadow: 0 0 8px var(--dynamic-accent-glow);
+      }
+      .prose-custom blockquote {
+        border-right: 4px solid var(--border-primary);
+        padding-right: 1rem;
+        margin-right: 0;
+        font-style: italic;
+        color: var(--text-secondary);
+      }
+      .prose-custom del {
+        color: var(--text-secondary);
+      }
+      
+      /* Fi: Hero Title for Dramatic Typography */
+      .hero-title {
+        font-size: 3.75rem; /* 5xl */
+        font-weight: 900; /* extrabold */
+        letter-spacing: -0.05em;
+      }
+      .themed-title {
+        color: var(--dynamic-accent-highlight);
+        /* Fi: Lighting effect, not just a glow */
+        text-shadow: 0 0 20px var(--dynamic-accent-glow), 0 1px 2px rgba(0,0,0,0.5);
       }
 
-      /* Glassmorphism card style */
-      .glass-card {
-        background-color: rgba(17, 24, 39, 0.6); /* gray-900/60 */
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid var(--border-color);
-        transition: border-color 0.3s, box-shadow 0.3s;
+      /* Base card style for components */
+      .themed-card {
+        border-radius: 20px;
+        transition: border-color 0.3s, box-shadow 0.3s, transform 0.2s var(--fi-cubic-bezier), background-color 0.3s, padding 0.3s, opacity 0.4s;
       }
-      .glass-card:hover {
-        border-color: var(--border-color-hover);
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+      /* Tap State - Holistic Feedback */
+      .themed-card:active {
+        transform: scale(0.97);
+      }
+      
+      .density-comfortable .themed-card { padding: 1.25rem; } /* Increased padding */
+      .density-compact .themed-card { padding: 0.75rem; }
+      .density-compact .space-y-3 { gap: 0.5rem; }
+      .density-compact .space-y-4 { gap: 0.75rem; }
+      .density-compact .space-y-6 { gap: 1rem; }
+      .density-compact .space-y-8 { gap: 1.5rem; }
+
+
+      /* Glass Style - THE MARCELO EFFECT (Refined) */
+      body.card-style-glass .themed-card,
+      .glass-modal-bg,
+      .glass-nav {
+        background-color: rgba(255, 255, 255, 0.08); /* Lighter, more translucent */
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-top: 1px solid rgba(255, 255, 255, 0.15); /* Simulate top-down light */
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      }
+      body.card-style-glass .themed-card:hover {
+        border-color: rgba(255,255,255,0.2);
+        box-shadow: 0 0 25px var(--dynamic-accent-glow);
       }
 
-      /* Screen transition animation */
-      @keyframes fade-in-up {
+      /* Flat Style */
+      body.card-style-flat .themed-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-primary); /* Use primary border for consistency */
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      body.card-style-flat .themed-card:hover {
+        background-color: var(--bg-secondary);
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+
+      /* Bordered Style */
+      body.card-style-bordered .themed-card {
+        background-color: transparent;
+        border: 1px solid var(--border-primary);
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      body.card-style-bordered .themed-card:hover {
+        background-color: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255,255,255,0.15);
+        box-shadow: 0 0 20px var(--dynamic-accent-glow);
+      }
+
+      .themed-glow-text {
+        text-shadow: 0 0 8px var(--dynamic-accent-glow), 0 0 16px var(--dynamic-accent-glow);
+      }
+      
+      .svg-glow {
+        filter: drop-shadow(0 0 8px var(--dynamic-accent-glow));
+      }
+
+      /* NEW: Class for receding background effect - Immersive Layered Depth */
+      .receding-background {
+        transform: scale(0.98);
+        filter: blur(8px);
+        opacity: 0.7;
+        pointer-events: none;
+        transition: transform 0.3s var(--fi-cubic-bezier), filter 0.3s var(--fi-cubic-bezier), opacity 0.3s var(--fi-cubic-bezier);
+      }
+
+
+      /* --- FANTASY (Fi) ANIMATIONS - Cinematic Motion --- */
+      @keyframes screen-enter {
         from {
           opacity: 0;
-          transform: translateY(15px);
+          transform: translateY(15px) scale(0.99);
         }
         to {
           opacity: 1;
-          transform: translateY(0);
+          transform: translateY(0) scale(1);
         }
       }
-      .animate-fade-in-up {
-        animation: fade-in-up 0.5s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+      .animate-screen-enter {
+        animation: screen-enter 0.2s var(--fi-cubic-bezier) forwards;
+      }
+      
+      @keyframes item-enter-fi {
+        from { opacity: 0; transform: translateY(15px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .animate-item-enter-fi {
+        animation: item-enter-fi 0.2s var(--fi-cubic-bezier) both;
       }
 
-      /* Modal close animation */
+      @keyframes modal-expand-in {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-modal-expand-in { animation: modal-expand-in 0.2s var(--fi-cubic-bezier) forwards; }
+
       @keyframes slide-down-out {
           from { transform: translateY(0); opacity: 1; }
           to { transform: translateY(100%); opacity: 0; }
       }
-      .animate-slide-down-out { animation: slide-down-out 0.4s cubic-bezier(0.64, 0, 0.34, 1) forwards; }
+      .animate-slide-down-out { animation: slide-down-out 0.2s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards; }
+
+      @keyframes slide-up-in {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-up-in { animation: slide-up-in 0.2s var(--fi-cubic-bezier) forwards; }
+
+
+      /* Task item strikethrough animation */
+      .task-text::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: 0;
+        height: 1.5px;
+        background-color: currentColor;
+        width: 0;
+        transition: width 0.2s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+      }
+      .task-completed .task-text::after {
+        width: 100%;
+      }
+
+      /* Shimmer animation for skeleton loaders */
+      @keyframes shimmer {
+        100% {
+          transform: translateX(100%);
+        }
+      }
+      .shimmer-bg::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        transform: translateX(-100%);
+        background-image: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0) 0,
+          rgba(255, 255, 255, 0.03) 20%,
+          rgba(255, 255, 255, 0.06) 60%,
+          rgba(255, 255, 255, 0)
+        );
+        animation: shimmer 2s infinite;
+      }
+      
+      /* Custom Checkbox Animation */
+      @keyframes check-bounce {
+        0% { transform: scale(0.8); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+      }
+      .animate-check-bounce {
+        animation: check-bounce 0.2s ease-in-out;
+      }
+
+      /* Streak bump animation */
+      @keyframes bump-up {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.4); }
+        100% { transform: scale(1); }
+      }
+      .animate-bump-up {
+        display: inline-block;
+        animation: bump-up 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      /* Habit celebration sparkles */
+      @keyframes sparkle-animation {
+        0% { transform: scale(0) rotate(0deg); opacity: 0.5; }
+        50% { opacity: 1; }
+        100% { transform: scale(1.5) rotate(90deg); opacity: 0; }
+      }
+      .celebrate-sparkle {
+        position: absolute;
+        background-color: var(--dynamic-accent-highlight);
+        border-radius: 50%;
+        width: 8px;
+        height: 8px;
+        animation: sparkle-animation 0.7s ease-out forwards;
+        box-shadow: 0 0 5px var(--dynamic-accent-highlight), 0 0 10px var(--dynamic-accent-highlight);
+      }
+      
+      /* Style for completed items */
+      .completed-item, .completed-habit {
+        transform: scale(0.98);
+        opacity: 0.5;
+      }
+      .completed-item:hover, .completed-habit:hover {
+          opacity: 0.8;
+      }
+      .completed-habit {
+        box-shadow: 0 0 15px var(--dynamic-accent-glow);
+      }
+      
+      /* Focus Mode styles */
+      .focus-mode .completed-item, .focus-mode .completed-habit {
+        opacity: 0.35 !important;
+        transform: scale(0.98);
+      }
+      .focus-mode .non-essential-section {
+        opacity: 0.4;
+        pointer-events: none;
+      }
+
+      /* Drag & Drop styles */
+      .dragging-placeholder {
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px dashed var(--border-primary);
+        border-radius: 1.25rem;
+        height: 5rem;
+      }
+      .dragging-item {
+        opacity: 0.5;
+        transform: scale(1.02) rotate(1deg);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      }
+      .kanban-column-drag-over {
+        background-color: rgba(255, 255, 255, 0.03);
+      }
+      .calendar-day-drag-over {
+        background-color: var(--dynamic-accent-color);
+        border-radius: 0.5rem;
+      }
+
+      /* Selection Mode Styles */
+      .selection-mode .themed-card {
+          transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      }
+      .selection-mode .themed-card.selected {
+          transform: scale(0.98);
+          border-color: var(--dynamic-accent-start) !important;
+          box-shadow: 0 0 15px var(--dynamic-accent-glow);
+      }
 
     </style>
   <script type="importmap">
@@ -142,19 +403,22 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "showdown": "https://cdn.jsdelivr.net/npm/showdown/+esm"
   }
 }
 </script>
 </head>
   <body class="text-gray-200">
-    <div class="gradient-bg">
-      <div class="gradient-ball b1"></div>
-      <div class="gradient-ball b2"></div>
-      <div class="gradient-ball b3"></div>
-    </div>
     <div id="root"></div>
     <script src="https://apis.google.com/js/api.js"></script>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      // Interactive background effect
+      document.addEventListener('mousemove', (e) => {
+        document.body.style.setProperty('--mouse-x', `${e.clientX}px`);
+        document.body.style.setProperty('--mouse-y', `${e.clientY}px`);
+      });
+    </script>
   </body>
 </html>

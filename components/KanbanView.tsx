@@ -1,0 +1,121 @@
+import React, { useState, useMemo, DragEvent } from 'react';
+import type { PersonalItem, PersonalItemType, AddableType } from '../types';
+import PersonalItemCard from './PersonalItemCard';
+import { AddIcon } from './icons';
+
+type Status = 'todo' | 'doing' | 'done';
+
+const columns: Record<Status, { title: string; color: string }> = {
+  todo: { title: 'לביצוע', color: 'var(--text-secondary)' },
+  doing: { title: 'בעבודה', color: 'var(--dynamic-accent-start)' },
+  done: { title: 'הושלם', color: 'var(--success)' },
+};
+const columnOrder: Status[] = ['todo', 'doing', 'done'];
+
+interface KanbanViewProps {
+  items: PersonalItem[];
+  onUpdate: (id: string, updates: Partial<PersonalItem>) => void;
+  onSelectItem: (item: PersonalItem, event: React.MouseEvent) => void;
+  onQuickAdd: (config: { type: AddableType; defaultStatus: Status }) => void;
+}
+
+const getItemStatus = (item: PersonalItem): Status => {
+  if (item.type === 'task' && item.isCompleted) return 'done';
+  if (item.status === 'done') return 'done';
+  if (item.status === 'doing') return 'doing';
+  return 'todo';
+};
+
+const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, onQuickAdd }) => {
+  const [draggedItem, setDraggedItem] = useState<PersonalItem | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<Status | null>(null);
+
+  const itemsByStatus = useMemo(() => {
+    const grouped: Record<Status, PersonalItem[]> = { todo: [], doing: [], done: [] };
+    items.forEach(item => {
+      const status = getItemStatus(item);
+      grouped[status].push(item);
+    });
+    // Sort items within each column by creation date
+    Object.keys(grouped).forEach(status => {
+        grouped[status as Status].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
+    return grouped;
+  }, [items]);
+
+  const handleDragStart = (e: DragEvent, item: PersonalItem) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: DragEvent, status: Status) => {
+    e.preventDefault();
+    if (draggedItem && getItemStatus(draggedItem) !== status) {
+        setDragOverColumn(status);
+    }
+  };
+  
+  const handleDragLeave = () => {
+      setDragOverColumn(null);
+  };
+
+  const handleDrop = (e: DragEvent, targetStatus: Status) => {
+    e.preventDefault();
+    if (draggedItem && getItemStatus(draggedItem) !== targetStatus) {
+      const updates: Partial<PersonalItem> = { status: targetStatus };
+      if (['task', 'roadmap'].includes(draggedItem.type)) {
+        updates.isCompleted = targetStatus === 'done';
+      }
+      onUpdate(draggedItem.id, updates);
+    }
+    setDraggedItem(null);
+    setDragOverColumn(null);
+  };
+  
+  const handleQuickAdd = (status: Status) => {
+      const relevantType: PersonalItemType = status === 'todo' ? 'task' : 'note';
+      onQuickAdd({type: relevantType, defaultStatus: status});
+  }
+
+  return (
+    <div className="flex gap-4 overflow-x-auto p-2 -mx-4">
+      {columnOrder.map(status => (
+        <div
+          key={status}
+          onDragOver={(e) => handleDragOver(e, status)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, status)}
+          className={`flex-shrink-0 w-80 bg-[var(--bg-secondary)] rounded-2xl flex flex-col transition-colors ${dragOverColumn === status ? 'kanban-column-drag-over' : ''}`}
+        >
+          <div className="p-3 border-b border-[var(--border-primary)] flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: columns[status].color}}></div>
+            <h3 className="font-semibold text-lg text-white">{columns[status].title}</h3>
+            <span className="text-sm text-[var(--text-secondary)] font-mono">{itemsByStatus[status].length}</span>
+          </div>
+          <div className="p-3 space-y-3 overflow-y-auto flex-grow">
+            {itemsByStatus[status].map((item, index) => (
+              <PersonalItemCard
+                key={item.id}
+                item={item}
+                index={index}
+                onSelect={onSelectItem}
+                onUpdate={onUpdate}
+                onContextMenu={() => {}} // Context menu is complex here, disable for now
+                onDragStart={(e, i) => handleDragStart(e, i)}
+                isDragging={draggedItem?.id === item.id}
+              />
+            ))}
+             {dragOverColumn === status && <div className="dragging-placeholder"></div>}
+          </div>
+          {status === 'todo' && (
+             <button onClick={() => handleQuickAdd('todo')} className="m-3 mt-0 p-2 text-sm text-[var(--text-secondary)] hover:text-white hover:bg-white/10 rounded-lg w-[calc(100%-1.5rem)] flex items-center justify-center gap-2">
+                <AddIcon className="w-5 h-5" /> הוסף פריט
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default KanbanView;

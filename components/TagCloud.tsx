@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import type { Tag, FeedItem } from '../types';
+import { getTagColor } from './icons';
 
 interface TagCloudProps {
   tags: Tag[];
@@ -21,11 +22,8 @@ const TagCloud: React.FC<TagCloudProps> = ({ tags, items, onTagClick }) => {
   const sizedTags = useMemo(() => {
     if (tagFrequencies.size === 0) return [];
     
-    // FIX: Explicitly type `counts` to resolve type inference error on the following lines.
+    // FIX: Explicitly type `counts` as `number[]` to ensure type safety for Math.min/max.
     const counts: number[] = Array.from(tagFrequencies.values());
-    // FIX: Using Math.min/max on a spread array is cleaner and avoids potential issues
-    // with type inference in the `reduce` function. Since tagFrequencies is not empty,
-    // `counts` will also not be empty, making this safe.
     const minCount = Math.min(...counts);
     const maxCount = Math.max(...counts);
     
@@ -55,29 +53,27 @@ const TagCloud: React.FC<TagCloudProps> = ({ tags, items, onTagClick }) => {
       .sort((a, b) => b.count - a.count);
   }, [tags, tagFrequencies]);
 
-  const colorPalette = [
-    'text-blue-300', 'text-purple-300', 'text-teal-300', 'text-pink-300', 'text-green-300'
-  ];
-
   return (
     <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-2 p-4 max-w-2xl mx-auto">
-      {sizedTags.map((tag, index) => (
-        <button
-          key={tag.id}
-          onClick={() => onTagClick(tag.name)}
-          className="transition-all duration-300 hover:text-white hover:scale-110"
-          style={{
-            fontSize: `${tag.fontSize}px`,
-            color: 'var(--glow-color-blue)',
-            // Applying colors from a palette
-            // color: colorPalette[index % colorPalette.length],
-            opacity: 0.6 + (tag.fontSize - 14) / (32 - 14) * 0.4,
-            fontWeight: 600,
-          }}
-        >
-          {tag.name}
-        </button>
-      ))}
+      {sizedTags.map((tag) => {
+        const colors = getTagColor(tag.name);
+        return (
+            <button
+            key={tag.id}
+            onClick={() => onTagClick(tag.name)}
+            className="transition-all duration-300 hover:scale-110"
+            style={{
+                fontSize: `${tag.fontSize}px`,
+                color: colors.textColor,
+                opacity: 0.8,
+                fontWeight: 600,
+                textShadow: '0 1px 3px rgba(0,0,0,0.5)'
+            }}
+            >
+            {tag.name}
+            </button>
+        )
+      })}
     </div>
   );
 };
