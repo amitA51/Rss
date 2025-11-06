@@ -7,12 +7,14 @@ import {
     DumbbellIcon, TemplateIcon, TrashIcon, AddIcon, TargetIcon, ChartBarIcon, CloseIcon, SparklesIcon, RoadmapIcon,
     UploadIcon, MicrophoneIcon, BoldIcon, ItalicIcon, CodeIcon, ListIcon, Heading1Icon, 
     Heading2Icon, QuoteIcon, StrikethroughIcon, getFileIcon
-} from './icons';
+} from '../components/icons';
 import { AppContext } from '../state/AppContext';
 import StatusMessage, { StatusMessageType } from './StatusMessage';
 import { useDebounce } from '../hooks/useDebounce';
 import { getIconForName } from './IconMap';
 import { AVAILABLE_ICONS } from '../constants';
+import LoadingSpinner from './LoadingSpinner';
+import { useHaptics } from '../hooks/useHaptics';
 
 // --- Reducer for Complex State Management ---
 type SubmissionStatus = 'idle' | 'submitting';
@@ -507,6 +509,7 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
     const { state: appState, dispatch: appDispatch } = useContext(AppContext);
     const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number} | null>(null);
     const [isGeneratingRoadmap, setIsGeneratingRoadmap] = useState(false);
+    const { triggerHaptic } = useHaptics();
 
     useEffect(() => {
         const sharedDataString = sessionStorage.getItem('sharedData');
@@ -585,13 +588,13 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
                 if (itemType === 'task') setActiveScreen('today');
             }
             
-            if (window.navigator.vibrate) window.navigator.vibrate(50);
+            triggerHaptic('medium');
             localDispatch({type: 'SUBMIT_DONE'});
             onClose();
 
         } catch (error: any) {
             console.error('Submission failed:', error);
-            if (window.navigator.vibrate) window.navigator.vibrate(100);
+            triggerHaptic('heavy');
             setStatusMessage({type: 'error', text: error.message || 'שגיאה בשמירת הפריט', id: Date.now()});
             localDispatch({type: 'SUBMIT_DONE'});
         }
@@ -622,8 +625,8 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-40" onClick={onClose}>
-            <div className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] animate-modal-expand-in`} onClick={e => e.stopPropagation()}>
-                <header className={`p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 ${headerFooterBgClass} backdrop-blur-sm z-10`}>
+            <div className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] animate-modal-enter`} onClick={e => e.stopPropagation()}>
+                <header className={`p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 ${headerFooterBgClass} backdrop-blur-sm z-10 rounded-t-3xl`}>
                     <h2 className="text-xl font-bold text-white">הוספה חדשה</h2>
                     <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95">
                         <CloseIcon className="h-6 w-6" />
@@ -660,8 +663,8 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
                     )}
                 </form>
                  <footer className={`p-4 border-t border-[var(--border-primary)] sticky bottom-0 ${headerFooterBgClass} backdrop-blur-sm`}>
-                     <button type="submit" onClick={handleSubmit} disabled={state.submissionStatus === 'submitting'} className="w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]">
-                        {state.submissionStatus === 'submitting' ? 'שומר...' : 'שמור פריט'}
+                     <button type="submit" onClick={handleSubmit} disabled={state.submissionStatus === 'submitting'} className="w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 h-12 flex items-center justify-center">
+                        {state.submissionStatus === 'submitting' ? <LoadingSpinner /> : 'שמור פריט'}
                     </button>
                 </footer>
             </div>

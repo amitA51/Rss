@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { FeedItem, Tag, PersonalItem, Space, RoadmapStep } from '../types';
+import type { FeedItem, Tag, PersonalItem, Space, RoadmapStep, AiPersonality } from '../types';
 import { loadSettings } from './settingsService';
 import { getFeedItems, getPersonalItems } from './dataService';
 
@@ -14,6 +14,46 @@ if (API_KEY) {
 } else {
   console.warn("API_KEY is not set. AI features will not work.");
 }
+
+// ==================================================================================
+// --- Type Definitions for AI Responses ---
+// ==================================================================================
+
+interface AiSearchResult {
+  answer: string | null;
+  itemIds: string[];
+}
+interface NaturalLanguageTaskResult {
+  title: string;
+  dueDate: string | null;
+}
+interface RelatedItemsResult {
+  relatedItemIds: string[];
+}
+interface UrlMetadataResult {
+  title: string;
+  content: string;
+  imageUrl?: string;
+}
+interface MentorContentResult {
+  quotes: string[];
+}
+interface Flashcard {
+    question: string;
+    answer: string;
+}
+interface FlashcardResponse {
+    flashcards: Flashcard[];
+}
+interface RoadmapStepResponse {
+    title: string;
+    description: string;
+    duration: string;
+}
+interface RoadmapResponse {
+    steps: RoadmapStepResponse[];
+}
+
 
 // ==================================================================================
 // --- GEMINI AI SERVICES ---
@@ -67,7 +107,7 @@ export const extractTextFromImage = async (base64ImageData: string, mimeType: st
  * @param allItems The corpus of items to search through.
  * @returns An object containing the AI's synthesized answer and an array of relevant item IDs.
  */
-export const performAiSearch = async (query: string, allItems: FeedItem[]): Promise<{ answer: string | null, itemIds: string[] }> => {
+export const performAiSearch = async (query: string, allItems: FeedItem[]): Promise<AiSearchResult> => {
     if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
     // CRITICAL FIX: Limit the search corpus to the 200 most recent items to prevent token limit errors.
@@ -105,7 +145,7 @@ Respond ONLY with the JSON object.`;
             contents: prompt,
         });
 
-        return parseAiJson<{ answer: string | null, itemIds: string[] }>(response.text);
+        return parseAiJson<AiSearchResult>(response.text);
 
     } catch (error) {
         console.error("Error performing AI search:", error);
@@ -118,7 +158,7 @@ Respond ONLY with the JSON object.`;
  * @param query The user's input string.
  * @returns An object containing the task title and due date.
  */
-export const parseNaturalLanguageTask = async (query: string): Promise<{ title: string; dueDate: string | null }> => {
+export const parseNaturalLanguageTask = async (query: string): Promise<NaturalLanguageTaskResult> => {
     if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
     const today = new Date().toISOString().split('T')[0];
@@ -150,11 +190,8 @@ export const parseNaturalLanguageTask = async (query: string): Promise<{ title: 
             }
         });
         
-        const parsed = JSON.parse(response.text);
-        return {
-            title: parsed.title,
-            dueDate: parsed.dueDate 
-        };
+        const parsed: NaturalLanguageTaskResult = JSON.parse(response.text);
+        return parsed;
     } catch (error) {
         console.error("Error parsing natural language task:", error);
         return { title: query, dueDate: null };
@@ -225,7 +262,7 @@ Respond ONLY with the JSON object.`;
             contents: prompt,
         });
         
-        const result = parseAiJson<{ relatedItemIds: string[] }>(response.text);
+        const result = parseAiJson<RelatedItemsResult>(response.text);
         const relatedIds = new Set(result.relatedItemIds);
         return allItems.filter(item => relatedIds.has(item.id));
 
@@ -292,7 +329,7 @@ export const getUrlMetadata = async (url: string): Promise<Partial<PersonalItem>
                 }
             }
         });
-        const metadata = JSON.parse(response.text);
+        const metadata: UrlMetadataResult = JSON.parse(response.text);
         return {
             title: metadata.title,
             content: metadata.content,
@@ -330,7 +367,7 @@ export const generateMentorContent = async (mentorName: string): Promise<string[
                 }
             }
         });
-        const result = JSON.parse(response.text);
+        const result: MentorContentResult = JSON.parse(response.text);
         return result.quotes;
     } catch (error) {
         console.error("Error generating mentor content:", error);
@@ -367,18 +404,26 @@ export const synthesizeContent = async (items: FeedItem[]): Promise<string> => {
     }
 };
 
-export const generateDailyBriefing = async (tasks: PersonalItem[], habits: PersonalItem[], gratitude: string | null): Promise<string> => {
+export const generateDailyBriefing = async (tasks: PersonalItem[], habits: PersonalItem[], gratitude: string | null, personality: AiPersonality): Promise<string> => {
     if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
+    
+    let personalityInstruction = "Create a short, encouraging, and focused summary for the user's day.";
+    if (personality === 'concise') {
+        personalityInstruction = "Create a very short, direct, and to-the-point summary for the user's day. Use bullet points.";
+    } else if (personality === 'formal') {
+        personalityInstruction = "Create a formal and structured summary of the user's objectives for the day.";
+    }
+
     const prompt = `
     You are a personal assistant creating a daily briefing in Hebrew.
-    Based on the following data, create a short, encouraging, and focused summary for the user's day.
+    Based on the following data and the requested personality, ${personalityInstruction}
     Use Markdown for formatting. Address the user directly ("היום", "יש לך", etc.).
-    - Start with a positive opening.
+    - Start with a suitable opening for the personality.
     - Highlight the top 1-3 most important tasks.
-    - Mention the habits for today and their current streaks to encourage continuation.
-    - If a gratitude entry is available, reflect on it positively.
-    - End with an encouraging closing statement.
+    - Mention the habits for today and their current streaks.
+    - If a gratitude entry is available, reflect on it.
+    - End with a closing statement that matches the personality.
 
     Data:
     - Today's Date: ${new Date().toLocaleDateString('he-IL')}
@@ -467,8 +512,8 @@ export const generateFlashcards = async (content: string): Promise<{id: string; 
                 }
             }
         });
-        const result = JSON.parse(response.text);
-        return result.flashcards.map((fc: any) => ({...fc, id: `fc-${Date.now()}-${Math.random()}`}));
+        const result: FlashcardResponse = JSON.parse(response.text);
+        return result.flashcards.map((fc) => ({...fc, id: `fc-${Date.now()}-${Math.random()}`}));
     } catch (error) {
         console.error("Error generating flashcards:", error);
         throw new Error("Failed to generate flashcards.");
@@ -511,7 +556,7 @@ export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapStep, '
                 }
             }
         });
-        const result = JSON.parse(response.text);
+        const result: RoadmapResponse = JSON.parse(response.text);
         return result.steps;
     } catch (error) {
         console.error("Error generating roadmap:", error);

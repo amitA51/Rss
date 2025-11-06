@@ -6,6 +6,7 @@ import { TrashIcon, CloseIcon, AddIcon, EditIcon } from './icons';
 import { AVAILABLE_ICONS } from '../constants';
 import { AppContext } from '../state/AppContext';
 import StatusMessage, { StatusMessageType } from './StatusMessage';
+import { useHaptics } from '../hooks/useHaptics';
 
 
 // --- Helper Components ---
@@ -41,6 +42,7 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
     const { state, dispatch } = useContext(AppContext);
     const [isClosing, setIsClosing] = useState(false);
     const [activeTab, setActiveTab] = useState<'personal' | 'feed'>('personal');
+    const { triggerHaptic } = useHaptics();
     
     // State for editing/creating a space
     const [editingSpace, setEditingSpace] = useState<Partial<Space> | null>(null);
@@ -91,7 +93,7 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
         const spaceToDelete = state.spaces.find(s => s.id === id);
         if (!spaceToDelete) return;
         
-        if(window.navigator.vibrate) window.navigator.vibrate(50);
+        triggerHaptic('medium');
         
         await dataService.removeSpace(id);
         dispatch({ type: 'REMOVE_SPACE', payload: id });
@@ -124,7 +126,7 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
         const feedToDelete = feeds.find(f => f.id === id);
         if(!feedToDelete) return;
 
-        if(window.navigator.vibrate) window.navigator.vibrate(50);
+        triggerHaptic('medium');
 
         await dataService.removeFeed(id);
         setFeeds(currentFeeds => currentFeeds.filter(f => f.id !== id));
@@ -141,10 +143,10 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
     return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={handleClose}>
         <div 
-            className={`bg-[var(--bg-secondary)] w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] ${isClosing ? 'animate-slide-down-out' : 'animate-modal-expand-in'}`}
+            className={`bg-[var(--bg-secondary)] w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] ${isClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
             onClick={(e) => e.stopPropagation()}
         >
-            <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm z-10">
+            <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm z-10 rounded-t-3xl">
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">ניהול מרחבים ופידים</h2>
                 <button onClick={handleClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95">
                     <CloseIcon className="h-6 w-6" />

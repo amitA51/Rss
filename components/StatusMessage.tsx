@@ -11,15 +11,13 @@ interface StatusMessageProps {
   duration?: number;
 }
 
-const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onDismiss, onUndo, duration = 5000 }) => {
+const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onDismiss, onUndo, duration = 2500 }) => {
   useEffect(() => {
-    if (!onUndo) { // Only set timeout if there's no undo action
-        const timer = setTimeout(() => {
-          onDismiss();
-        }, duration);
-        return () => clearTimeout(timer);
-    }
-  }, [onDismiss, duration, onUndo]);
+    const timer = setTimeout(() => {
+      onDismiss();
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [onDismiss, duration]);
 
   const handleUndo = async () => {
     if (onUndo) {

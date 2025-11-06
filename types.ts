@@ -113,6 +113,8 @@ export interface PersonalItem {
   lastCompleted?: string; // ISO date string
   completionHistory?: { date: string }[];
   frequency?: 'daily' | 'weekly';
+  reminderEnabled?: boolean;
+  reminderTime?: string; // "HH:mm" format
   
   // Book specific
   author?: string;
@@ -167,6 +169,8 @@ export type CardStyle = 'glass' | 'flat' | 'bordered';
 export type HomeScreenComponentId = 'gratitude' | 'habits' | 'tasks';
 export type UiDensity = 'comfortable' | 'compact';
 export type FeedViewMode = 'list' | 'visual';
+export type AnimationIntensity = 'off' | 'subtle' | 'default' | 'full';
+export type AiPersonality = 'concise' | 'encouraging' | 'formal';
 
 export interface ThemeSettings {
   name: string; // e.g., "Gold", "Crimson", "Custom"
@@ -180,6 +184,13 @@ export interface IntervalTimerSettings {
   restDuration: number; // in seconds
   workDuration: number; // in seconds
   autoStartNext: boolean;
+}
+
+export interface PomodoroSettings {
+    workDuration: number; // minutes
+    shortBreak: number; // minutes
+    longBreak: number; // minutes
+    sessionsUntilLongBreak: number;
 }
 
 export interface HomeScreenComponent {
@@ -206,6 +217,15 @@ export interface AppSettings {
   navBarLayout: Screen[];
   enabledMentorIds: string[];
   feedViewMode: FeedViewMode;
+  enableHabitReminders: boolean;
+  
+  // Personalization
+  hapticFeedback: boolean;
+  animationIntensity: AnimationIntensity;
+  fontSizeScale: number;
+  addScreenLayout: AddableType[];
+  aiPersonality: AiPersonality;
+  pomodoroSettings: PomodoroSettings;
 }
 
 export interface WatchlistItem {

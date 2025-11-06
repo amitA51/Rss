@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import type { Screen } from '../types';
 import { 
     CheckCircleIcon, LinkIcon, ClipboardListIcon, BookOpenIcon, 
@@ -6,15 +6,14 @@ import {
     SummarizeIcon, UserIcon, LightbulbIcon, RoadmapIcon
 } from '../components/icons';
 import { ItemCreationForm } from '../components/ItemCreationForm';
-import { PersonalItemType } from '../types';
+import { PersonalItemType, AddableType } from '../types';
+import { AppContext } from '../state/AppContext';
 
 interface AddScreenProps {
   setActiveScreen: (screen: Screen) => void;
 }
 
-type AddableType = PersonalItemType | 'spark' | 'ticker';
-
-const itemTypes: { type: AddableType; label: string; icon: React.ReactNode; color: string; }[] = [
+const allItemTypes: { type: AddableType; label: string; icon: React.ReactNode; color: string; }[] = [
     { type: 'spark', label: 'ספארק', icon: <SparklesIcon />, color: 'var(--accent-start)' },
     { type: 'idea', label: 'רעיון', icon: <LightbulbIcon />, color: 'var(--warning)' },
     { type: 'note', label: 'פתק', icon: <ClipboardListIcon />, color: '#FBBF24' },
@@ -29,14 +28,6 @@ const itemTypes: { type: AddableType; label: string; icon: React.ReactNode; colo
     { type: 'ticker', label: 'מניה / מטבע', icon: <ChartBarIcon />, color: 'var(--text-secondary)' },
 ];
 
-const categories: Record<string, AddableType[]> = {
-    'מהיר ופשוט': ['spark', 'note', 'task'],
-    'ידע ולמידה': ['link', 'book', 'learning', 'idea', 'roadmap'],
-    'פרויקטים ומטרות': ['goal'],
-    'מעקב אישי': ['workout', 'journal'],
-    'פיננסי': ['ticker'],
-};
-
 const AddItemButton: React.FC<{
     icon: React.ReactNode;
     label: string;
@@ -45,12 +36,7 @@ const AddItemButton: React.FC<{
     style?: React.CSSProperties;
 }> = ({ icon, label, onClick, color, style }) => (
     <button
-        onClick={() => {
-            if (window.navigator.vibrate) {
-                window.navigator.vibrate(20);
-            }
-            onClick();
-        }}
+        onClick={onClick}
         className="themed-card p-3 flex flex-col items-center justify-center text-center aspect-square hover:-translate-y-1 animate-item-enter-fi"
         aria-label={`הוסף ${label}`}
         style={style}
@@ -67,11 +53,14 @@ const AddItemButton: React.FC<{
 
 
 const AddScreen: React.FC<AddScreenProps> = ({ setActiveScreen }) => {
+    const { state } = useContext(AppContext);
+    const { settings } = state;
+    const { addScreenLayout } = settings;
     const [selectedType, setSelectedType] = useState<AddableType | null>(null);
 
     useEffect(() => {
         const preselect = sessionStorage.getItem('preselect_add');
-        if (preselect && itemTypes.some(it => it.type === preselect)) {
+        if (preselect && allItemTypes.some(it => it.type === preselect)) {
             setSelectedType(preselect as AddableType);
             sessionStorage.removeItem('preselect_add');
         }
@@ -88,6 +77,13 @@ const AddScreen: React.FC<AddScreenProps> = ({ setActiveScreen }) => {
 
     }, []);
 
+    const handleItemClick = (type: AddableType) => {
+        if (window.navigator.vibrate) {
+            window.navigator.vibrate(20);
+        }
+        setSelectedType(type);
+    }
+
     const handleCloseForm = () => {
         setSelectedType(null);
     };
@@ -96,39 +92,26 @@ const AddScreen: React.FC<AddScreenProps> = ({ setActiveScreen }) => {
         <div className="pt-4 pb-8">
             <header className="mb-8 text-center">
                 <h1 className="hero-title themed-title">מה להוסיף?</h1>
-                <p className="text-[var(--accent-end)] opacity-90 mt-1">בחר סוג פריט כדי להתחיל.</p>
+                <p className="text-[var(--dynamic-accent-highlight)] opacity-90 mt-1 themed-glow-text">בחר סוג פריט כדי להתחיל.</p>
             </header>
             
-            <div className={`space-y-8 transition-all duration-500 var(--fi-cubic-bezier) ${selectedType ? 'receding-background' : ''}`}>
-                {(() => {
-                    let animationIndex = 0;
-                    return Object.entries(categories).map(([categoryName, types]) => (
-                        <section key={categoryName}>
-                            <h2 
-                                className="text-base font-semibold text-white mb-3 animate-item-enter-fi"
-                                style={{ animationDelay: `${animationIndex++ * 25}ms` }}
-                            >
-                                {categoryName}
-                            </h2>
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                {types.map((type) => {
-                                    const item = itemTypes.find(it => it.type === type);
-                                    if (!item) return null;
-                                    return (
-                                        <AddItemButton 
-                                            key={item.type}
-                                            label={item.label}
-                                            icon={item.icon}
-                                            color={item.color}
-                                            onClick={() => setSelectedType(item.type)}
-                                            style={{ animationDelay: `${animationIndex++ * 25}ms` }}
-                                        />
-                                    )
-                                })}
-                            </div>
-                        </section>
-                    ));
-                })()}
+            <div className={`transition-all duration-500 var(--fi-cubic-bezier) ${selectedType ? 'receding-background' : ''}`}>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {addScreenLayout.map((type, index) => {
+                        const item = allItemTypes.find(it => it.type === type);
+                        if (!item) return null;
+                        return (
+                            <AddItemButton 
+                                key={item.type}
+                                label={item.label}
+                                icon={item.icon}
+                                color={item.color}
+                                onClick={() => handleItemClick(item.type)}
+                                style={{ animationDelay: `${index * 25}ms` }}
+                            />
+                        )
+                    })}
+                </div>
             </div>
 
             {selectedType && (

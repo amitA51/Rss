@@ -7,7 +7,7 @@ import { AppContext } from '../state/AppContext';
 interface FeedCardV2Props {
   item: FeedItem;
   index: number;
-  onSelect: (item: FeedItem, event: React.MouseEvent) => void;
+  onSelect: (item: FeedItem, event: React.MouseEvent | React.KeyboardEvent) => void;
   onLongPress: (item: FeedItem) => void;
   onContextMenu: (event: React.MouseEvent, item: FeedItem) => void;
   isInSelectionMode: boolean;
@@ -87,6 +87,15 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
       className={`group relative themed-card p-4 transition-all duration-300 ease-[var(--fi-cubic-bezier)] cursor-pointer
         ${item.is_read && !isInSelectionMode ? 'opacity-60 hover:opacity-90' : ''}
         ${isSelected ? 'selected' : ''}`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect(item, e);
+          }
+      }}
+      aria-label={`פתח פריט: ${item.title}`}
     >
       {cardStyle === 'glass' && (
         <div 

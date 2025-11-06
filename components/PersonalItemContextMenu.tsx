@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { PersonalItem } from '../types';
 import { StarIcon, TrashIcon, EditIcon, PlayIcon, CopyIcon } from './icons';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface PersonalItemContextMenuProps {
   x: number;
@@ -16,6 +17,7 @@ interface PersonalItemContextMenuProps {
 const PersonalItemContextMenu: React.FC<PersonalItemContextMenuProps> = ({ x, y, item, onClose, onUpdate, onDelete, onDuplicate, onStartFocus }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x, y });
+  const { triggerHaptic } = useHaptics();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -38,8 +40,8 @@ const PersonalItemContextMenu: React.FC<PersonalItemContextMenuProps> = ({ x, y,
   }, [onClose, x, y]);
 
   const handleAction = (action: () => void, isDestructive = false) => {
-    if (isDestructive && window.navigator.vibrate) {
-        window.navigator.vibrate(100);
+    if (isDestructive) {
+        triggerHaptic('heavy');
     }
     action();
     onClose();

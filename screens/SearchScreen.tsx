@@ -176,6 +176,14 @@ export default function SearchScreen({ setActiveScreen }: SearchScreenProps) {
         });
     }, [dispatch, feedItems]);
     
+    const handleDeleteWithConfirmation = useCallback((id: string) => {
+        const itemToDelete = feedItems.find(item => item.id === id);
+        if (itemToDelete && window.confirm(`האם למחוק את "${itemToDelete.title}"?`)) {
+            handleDeleteItem(id);
+            setSelectedItem(null); // Close modal
+        }
+    }, [feedItems, handleDeleteItem]);
+
     const handleAddToLibrary = useCallback(async (item: FeedItem) => {
         try {
             const newPersonalItem = await convertFeedItemToPersonalItem(item);
@@ -311,6 +319,7 @@ export default function SearchScreen({ setActiveScreen }: SearchScreenProps) {
                 onClose={() => setSelectedItem(null)}
                 onSummarize={handleSummarize}
                 onUpdate={handleUpdateItem}
+                onDelete={handleDeleteWithConfirmation}
                 isSummarizing={!!isSummarizing}
             />
             {contextMenu.isOpen && contextMenu.item && (

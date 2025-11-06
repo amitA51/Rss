@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import type { PersonalItem } from '../types';
 import { TrashIcon, CheckCircleIcon, PlayIcon } from './icons';
 import { AppContext } from '../state/AppContext';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface TaskItemProps {
   item: PersonalItem;
   onUpdate: (id: string, updates: Partial<PersonalItem>) => void;
   onDelete: (id: string) => void;
-  onSelect: (item: PersonalItem, event: React.MouseEvent) => void;
+  onSelect: (item: PersonalItem, event: React.MouseEvent | React.KeyboardEvent) => void;
   onContextMenu: (event: React.MouseEvent, item: PersonalItem) => void;
   onStartFocus: (item: PersonalItem) => void;
   index: number;
@@ -41,34 +42,31 @@ const CustomCheckbox: React.FC<{ checked: boolean; onToggle: () => void; title: 
 
 
 const TaskItem: React.FC<TaskItemProps> = ({ item, onUpdate, onDelete, onSelect, onContextMenu, onStartFocus, index }) => {
+  const { triggerHaptic } = useHaptics();
   
-  const handleToggle = () => {
-    if (window.navigator.vibrate) {
-        window.navigator.vibrate(20);
-    }
+  const handleToggle = useCallback(() => {
+    triggerHaptic('light');
     onUpdate(item.id, { isCompleted: !item.isCompleted, lastCompleted: !item.isCompleted ? new Date().toISOString() : undefined });
-  };
+  }, [item.id, item.isCompleted, onUpdate, triggerHaptic]);
 
   const handleToggleSubTask = (subTaskId: string) => {
-    if (window.navigator.vibrate) {
-        window.navigator.vibrate(10);
-    }
+    triggerHaptic('light');
     const newSubTasks = item.subTasks?.map(st => 
         st.id === subTaskId ? { ...st, isCompleted: !st.isCompleted } : st
     );
     onUpdate(item.id, { subTasks: newSubTasks });
   };
   
-  const handleStartFocusSession = (e: React.MouseEvent) => {
+  const handleStartFocusSession = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
       onStartFocus(item);
-  }
+  }, [item, onStartFocus]);
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.navigator.vibrate) window.navigator.vibrate(100);
+    triggerHaptic('heavy');
     onDelete(item.id);
-  };
+  }, [item.id, onDelete, triggerHaptic]);
 
   const completedCount = item.subTasks?.filter(st => st.isCompleted).length || 0;
   const totalCount = item.subTasks?.length || 0;
@@ -98,14 +96,26 @@ const TaskItem: React.FC<TaskItemProps> = ({ item, onUpdate, onDelete, onSelect,
       return <span className="text-[var(--text-secondary)]">בעוד {diffDays} ימים</span>;
   }
 
-  return (
+    return (
     <div
-      onClick={(e) => onSelect(item, e)}
+      onClick={(e) => {
+        // Only trigger select if not clicking on interactive elements
+        if (!(e.target as HTMLElement).closest('button')) {
+          onSelect(item, e);
+        }
+      }}
       onContextMenu={(e) => onContextMenu(e, item)}
       className={`group relative themed-card p-4 flex items-start gap-4 border-l-4 transition-all duration-300 ${getPriorityColor(item.priority)} ${item.isCompleted ? 'task-completed completed-item' : ''} cursor-pointer active:scale-97 animate-item-enter-fi`}
       style={{ animationDelay: `${index * 50}ms` }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            onSelect(item, e);
+        }
+      }}
+      aria-label={`פרטי משימה: ${item.title}`}
     >
-      <CustomCheckbox checked={!!item.isCompleted} onToggle={handleToggle} title={item.title}/>
       
       <div className="flex-1 overflow-hidden pt-0.5">
         <div className="flex items-center gap-2">
@@ -129,14 +139,14 @@ const TaskItem: React.FC<TaskItemProps> = ({ item, onUpdate, onDelete, onSelect,
         <button
           onClick={handleStartFocusSession}
           className="text-[var(--text-secondary)] hover:text-[var(--accent-highlight)]"
-          aria-label="התחל סשן פוקוס"
+          aria-label={`התחל סשן פוקוס עבור: ${item.title}`}
         >
           <PlayIcon className="h-5 w-5" />
         </button>
         <button
           onClick={handleDelete}
           className="text-[var(--text-secondary)] hover:text-[var(--danger)]"
-          aria-label="מחק משימה"
+          aria-label={`מחק משימה: ${item.title}`}
         >
           <TrashIcon className="h-5 w-5" />
         </button>

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import type { PersonalItem } from '../types';
 import { FlameIcon, CheckCircleIcon, TrashIcon } from './icons';
 import { AppContext } from '../state/AppContext';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface HabitItemProps {
   item: PersonalItem;
@@ -14,22 +15,21 @@ interface HabitItemProps {
 
 const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelect, onContextMenu, index }) => {
   const [justCompleted, setJustCompleted] = useState(false);
+  const { triggerHaptic } = useHaptics();
 
-  const isCompletedToday = () => {
+  const isCompletedToday = useCallback(() => {
     if (!item.lastCompleted) return false;
     const lastDate = new Date(item.lastCompleted);
     const today = new Date();
     return lastDate.getFullYear() === today.getFullYear() &&
            lastDate.getMonth() === today.getMonth() &&
            lastDate.getDate() === today.getDate();
-  };
+  }, [item.lastCompleted]);
   
-  const handleComplete = () => {
+  const handleComplete = useCallback(() => {
     if (isCompletedToday()) return;
 
-    if (window.navigator.vibrate) {
-        window.navigator.vibrate(50);
-    }
+    triggerHaptic('medium');
     setJustCompleted(true);
     setTimeout(() => setJustCompleted(false), 800);
     
@@ -58,15 +58,15 @@ const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelec
         streak: newStreak,
         completionHistory: newHistory,
     });
-  };
+  }, [isCompletedToday, item.id, item.streak, item.lastCompleted, item.completionHistory, onUpdate, triggerHaptic]);
   
   const completed = isCompletedToday();
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.navigator.vibrate) window.navigator.vibrate(100);
+    triggerHaptic('heavy');
     onDelete(item.id);
-  };
+  }, [item.id, onDelete, triggerHaptic]);
 
   return (
     <div 

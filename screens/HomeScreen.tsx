@@ -11,12 +11,15 @@ import DailyProgressCircle from '../components/DailyProgressCircle';
 import { SettingsIcon, SparklesIcon, DragHandleIcon, EyeIcon, EyeOffIcon, CheckSquareIcon, StopwatchIcon } from '../components/icons';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { AppContext } from '../state/AppContext';
-import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, rollOverIncompleteTasks, reAddPersonalItem } from '../services/dataService';
 import { saveSettings } from '../services/settingsService';
 import { generateDailyBriefing } from '../services/geminiService';
 import { useTodayItems } from '../hooks/useTodayItems';
 import { useContextMenu } from '../hooks/useContextMenu';
 import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
+import { useHomeInteraction } from '../hooks/useHomeInteraction';
+import { rollOverIncompleteTasks } from '../services/dataService';
+import { useHaptics } from '../hooks/useHaptics';
+
 
 interface HomeScreenProps {
     setActiveScreen: (screen: Screen) => void;
@@ -33,25 +36,28 @@ const Section: React.FC<{
     componentId: HomeScreenComponentId | 'completed';
 }> = ({ title, children, count, isCollapsible, isExpanded, onToggle, className, componentId }) => {
     if (count === 0 && componentId !== 'gratitude') return null;
+    const sectionContentId = `section-content-${componentId}`;
 
     return (
         <section className={className}>
-            <div 
-                className="flex justify-between items-center mb-3 px-1"
-                onClick={isCollapsible ? onToggle : undefined}
-                style={{ cursor: isCollapsible ? 'pointer' : 'default' }}
+             <button
+                onClick={onToggle}
+                aria-expanded={isExpanded}
+                aria-controls={sectionContentId}
+                className="w-full flex justify-between items-center mb-3 px-1 disabled:cursor-default"
+                disabled={!isCollapsible}
             >
                 <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">{title}</h2>
                 {isCollapsible && (
-                     <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                        <span className="text-xs font-mono">{count}</span>
+                     <div className="flex items-center gap-2 text-[var(--text-secondary)] p-1">
+                        {componentId !== 'gratitude' && <span className="text-xs font-mono">{count}</span>}
                         <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                     </div>
                 )}
-            </div>
-            {isExpanded && <div className="space-y-3">{children}</div>}
+            </button>
+            {isExpanded && <div id={sectionContentId} className="space-y-3">{children}</div>}
         </section>
     );
 };
@@ -62,15 +68,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     const { isLoading, settings, personalItems } = state;
     const { todaysHabits, openTasks } = useTodayItems();
     const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<PersonalItem>();
+    const { triggerHaptic } = useHaptics();
+    
+    const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
+    const showStatus = useCallback((type: StatusMessageType, text: string, onUndo?: () => void) => {
+        if (type === 'error') {
+            triggerHaptic('heavy');
+        }
+        setStatusMessage({ type, text, id: Date.now(), onUndo });
+    }, [triggerHaptic]);
+
+    const {
+        selectedItem,
+        handleSelectItem,
+        handleCloseModal,
+        handleUpdateItem,
+        handleDeleteItem,
+        handleDeleteWithConfirmation,
+        handleDuplicateItem,
+        handleStartFocus,
+    } = useHomeInteraction(showStatus);
 
     const [layout, setLayout] = useState<HomeScreenComponent[]>(settings.homeScreenLayout);
     const [focusMode, setFocusMode] = useState(false);
-    const [collapsedSections, setCollapsedSections] = useState<Array<HomeScreenComponentId | 'completed'>>(['tasks', 'completed']);
+    const [collapsedSections, setCollapsedSections] = useState<Array<HomeScreenComponentId | 'completed'>>(['completed']);
 
-    const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
     const [isBriefingLoading, setIsBriefingLoading] = useState(false);
     const [briefingContent, setBriefingContent] = useState('');
-    const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
     const headerRef = useRef<HTMLElement>(null);
 
     // State for SECTION dragging
@@ -97,13 +121,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
-        if (type === 'error' && window.navigator.vibrate) {
-            window.navigator.vibrate(100);
-        }
-        setStatusMessage({ type, text, id: Date.now(), onUndo });
-    };
-
     const handleDrop = () => {
         if (dragItem.current !== null && dragOverItem.current !== null) {
             const newLayout = [...layout];
@@ -111,8 +128,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
             newLayout.splice(dragItem.current, 1);
             newLayout.splice(dragOverItem.current, 0, dragItemContent);
             setLayout(newLayout);
-            saveSettings({ ...settings, homeScreenLayout: newLayout });
-            dispatch({ type: 'SET_SETTINGS', payload: { ...settings, homeScreenLayout: newLayout } });
+            const newSettings = { ...settings, homeScreenLayout: newLayout };
+            saveSettings(newSettings);
+            dispatch({ type: 'SET_SETTINGS', payload: newSettings });
         }
         dragItem.current = null;
         dragOverItem.current = null;
@@ -125,68 +143,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         );
     };
 
-    const handleSelectItem = useCallback((item: PersonalItem, event: React.MouseEvent) => {
-        event.stopPropagation();
-        setSelectedItem(item)
-    }, []);
-
-    const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
-        const originalItem = personalItems.find(item => item.id === id);
-        if (!originalItem) return;
-
-        // Optimistic UI update
-        dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates } });
-        if (selectedItem?.id === id) {
-            setSelectedItem(prev => prev ? { ...prev, ...updates } : null);
-        }
-
-        try {
-            await updatePersonalItem(id, updates);
-        } catch (error) {
-            console.error("Failed to update item:", error);
-            // Rollback on failure
-            dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates: originalItem } });
-            if (selectedItem?.id === id) {
-                setSelectedItem(originalItem);
-            }
-            showStatus('error', 'שגיאה בעדכון הפריט.');
-        }
-    }, [dispatch, selectedItem, personalItems]);
-    
-    const handleDeleteItem = useCallback(async (id: string) => {
-        const itemToDelete = personalItems.find(item => item.id === id);
-        if (!itemToDelete) return;
-
-        if (window.navigator.vibrate) window.navigator.vibrate(50);
-        
-        await removePersonalItem(id);
-        dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
-
-        showStatus('success', 'הפריט נמחק.', async () => {
-            await reAddPersonalItem(itemToDelete);
-            dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
-        });
-    }, [dispatch, personalItems]);
-
-    const handleDuplicateItem = useCallback(async (id: string) => {
-        const newItem = await duplicatePersonalItem(id);
-        dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newItem });
-        showStatus('success', 'הפריט שוכפל');
-    }, [dispatch]);
-
-    const handleStartFocus = useCallback((item: PersonalItem) => {
-        dispatch({ type: 'START_FOCUS_SESSION', payload: item });
-        showStatus('success', `סשן פוקוס התחיל עבור: ${item.title}`);
-    }, [dispatch]);
-
-    const handleStartGlobalFocus = () => {
-        // find the first task in the sorted list
+    const handleStartGlobalFocus = useCallback(() => {
         if (openTasks.length > 0) {
             handleStartFocus(openTasks[0]);
         } else {
             showStatus('success', 'אין משימות פתוחות להתמקד בהן.');
         }
-    };
+    }, [openTasks, handleStartFocus, showStatus]);
 
     const handleGetBriefing = async () => {
         if (isBriefingLoading) return;
@@ -194,7 +157,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         setBriefingContent('');
         try {
             const gratitudeItem = personalItems.find(item => item.type === 'gratitude' && new Date(item.createdAt).toDateString() === new Date().toDateString());
-            const briefing = await generateDailyBriefing(openTasks.slice(0,3), todaysHabits, gratitudeItem?.content || null);
+            const briefing = await generateDailyBriefing(openTasks.slice(0,3), todaysHabits, gratitudeItem?.content || null, settings.aiPersonality);
             setBriefingContent(briefing);
         } catch (error) {
             console.error(error);
@@ -312,9 +275,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     };
 
     const componentMeta: Record<HomeScreenComponentId, { title: string; count: number; isCollapsible: boolean; isNonEssential?: boolean }> = {
-        gratitude: { title: settings.sectionLabels.gratitude, count: 1, isCollapsible: false, isNonEssential: true },
-        habits: { title: settings.sectionLabels.habits, count: todaysHabits.length, isCollapsible: true },
-        tasks: { title: settings.sectionLabels.tasks, count: openTasks.length, isCollapsible: true },
+        gratitude: { title: settings.sectionLabels.gratitude, count: 1, isCollapsible: true, isNonEssential: true },
+        habits: { title: "הרגלים", count: todaysHabits.length, isCollapsible: true },
+        tasks: { title: "משימות להיום", count: openTasks.length, isCollapsible: true },
     };
 
     return (
@@ -329,23 +292,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setFocusMode(!focusMode)} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                        <button onClick={() => setFocusMode(!focusMode)} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors" aria-label={focusMode ? "כבה מצב פוקוס" : "הפעל מצב פוקוס"}>
                             {focusMode ? <EyeOffIcon className="w-6 h-6"/> : <EyeIcon className="w-6 h-6"/>}
                         </button>
                          <button onClick={handleStartGlobalFocus} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors" aria-label="התחל סשן פוקוס כללי">
                             <StopwatchIcon className="w-6 h-6"/>
                         </button>
-                        <button onClick={handleGetBriefing} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                        <button onClick={handleGetBriefing} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors" aria-label="הצג תדריך יומי">
                             <SparklesIcon className="w-6 h-6"/>
                         </button>
-                        <button onClick={() => setActiveScreen('settings')} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors">
+                        <button onClick={() => setActiveScreen('settings')} className="p-2 rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors" aria-label="פתח הגדרות">
                             <SettingsIcon className="w-6 h-6"/>
                         </button>
                     </div>
                 </div>
             </header>
             
-            <QuickAddTask onTaskAdded={() => showStatus('success', 'המשימה נוספה')} />
+            <QuickAddTask onItemAdded={(message) => showStatus('success', message)} />
 
             {isLoading ? <SkeletonLoader count={5} /> : (
                 <>
@@ -355,16 +318,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
                         return (
                             <div
                                 key={component.id}
-                                draggable
-                                onDragStart={() => { dragItem.current = index; setDragging(true); }}
-                                onDragEnter={() => dragOverItem.current = index}
-                                onDragEnd={handleDrop}
-                                onDragOver={(e) => e.preventDefault()}
                                 className={`transition-all duration-300 ${dragging && dragItem.current === index ? 'dragging-item' : ''}`}
                             >
-                                {dragging && dragItem.current === dragOverItem.current && <div className="dragging-placeholder mb-4"></div>}
                                 <div className="flex items-start gap-2">
-                                    <div className="pt-2 cursor-grab text-[var(--text-secondary)]/50 hover:text-white"><DragHandleIcon className="w-5 h-5"/></div>
+                                    <button 
+                                        draggable
+                                        onDragStart={() => { dragItem.current = index; setDragging(true); }}
+                                        onDragEnter={() => dragOverItem.current = index}
+                                        onDragEnd={handleDrop}
+                                        onDragOver={(e) => e.preventDefault()}
+                                        className="pt-2 cursor-grab text-[var(--text-secondary)]/50 hover:text-white"
+                                        aria-label={`גרור כדי לסדר מחדש את אזור ${meta.title}`}
+                                    >
+                                        <DragHandleIcon className="w-5 h-5"/>
+                                    </button>
                                     <div className="flex-1">
                                         <Section
                                             componentId={component.id}
@@ -416,8 +383,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
                     </Section>
                 </>
             )}
-            
-            <PersonalItemDetailModal item={selectedItem} onClose={(nextItem) => setSelectedItem(nextItem || null)} onUpdate={handleUpdateItem} />
+            {selectedItem && <PersonalItemDetailModal item={selectedItem} onClose={handleCloseModal} onUpdate={handleUpdateItem} onDelete={handleDeleteWithConfirmation} />}
             {contextMenu.isOpen && contextMenu.item && <PersonalItemContextMenu x={contextMenu.x} y={contextMenu.y} item={contextMenu.item} onClose={closeContextMenu} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onDuplicate={handleDuplicateItem} onStartFocus={handleStartFocus} />}
             {(isBriefingLoading || briefingContent) && <DailyBriefingModal isLoading={isBriefingLoading} briefingContent={briefingContent} onClose={() => setBriefingContent('')} />}
             {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}

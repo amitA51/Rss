@@ -2,6 +2,7 @@ import React, { useMemo, useContext, useCallback } from 'react';
 import { FeedIcon, AddIcon, TargetIcon, LayoutDashboardIcon, ChartBarIcon, SearchIcon, SettingsIcon } from './icons';
 import type { Screen } from '../types';
 import { AppContext } from '../state/AppContext';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface NavItemProps {
   label: string;
@@ -60,6 +61,7 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
   const { state } = useContext(AppContext);
   const { settings } = state;
   const { screenLabels, navBarLayout } = settings;
+  const { triggerHaptic } = useHaptics();
 
   const handleLongPressAdd = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -67,11 +69,9 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
     if (lastType) {
       sessionStorage.setItem('preselect_add', lastType);
       setActiveScreen('add');
-       if (window.navigator.vibrate) {
-        window.navigator.vibrate(50);
-      }
+       triggerHaptic('medium');
     }
-  }, [settings.lastAddedType, setActiveScreen]);
+  }, [settings.lastAddedType, setActiveScreen, triggerHaptic]);
 
   const handleAddItemClick = useCallback(() => {
     if (activeScreen === 'investments') {

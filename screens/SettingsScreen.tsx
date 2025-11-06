@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, DragEvent } from 'react';
-import type { AppSettings, Template, Screen, HomeScreenComponent, HomeScreenComponentId, ThemeSettings, AppFont, CardStyle, Mentor, UiDensity } from '../types';
+import type { AppSettings, Template, Screen, HomeScreenComponent, HomeScreenComponentId, ThemeSettings, AppFont, CardStyle, Mentor, UiDensity, AnimationIntensity } from '../types';
 import { saveSettings, loadSettings } from '../services/settingsService';
 import * as dataService from '../services/dataService';
 import * as notifications from '../services/notificationsService';
@@ -427,6 +427,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ setActiveScreen }) => {
             )}
             <div className="flex justify-between items-center">
                 <div>
+                    <p className="text-[var(--text-primary)] font-medium">תזכורות להרגלים</p>
+                    <p className="text-sm text-[var(--text-secondary)]">קבל התראות על הרגלים שלא הושלמו</p>
+                </div>
+                <ToggleSwitch checked={settings.enableHabitReminders} onChange={(val) => handleSettingChange('enableHabitReminders', val)} />
+            </div>
+            <div className="flex justify-between items-center">
+                <div>
                     <p className="text-[var(--text-primary)] font-medium">סנכרון רקע תקופתי</p>
                     <p className="text-sm text-[var(--text-secondary)]">בדוק עדכונים ברקע ועדכן את תג האפליקציה</p>
                 </div>
@@ -503,6 +510,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ setActiveScreen }) => {
                     options={[
                         { label: 'נוחה', value: 'comfortable' },
                         { label: 'דחוסה', value: 'compact' }
+                    ]}
+                />
+            </div>
+            <div className="border-t border-[var(--border-primary)] pt-6">
+                 <p className="text-[var(--text-primary)] font-medium mb-3">עוצמת אנימציה</p>
+                 <SegmentedControl
+                    value={settings.animationIntensity}
+                    onChange={(val) => handleSettingChange('animationIntensity', val as AnimationIntensity)}
+                    options={[
+                        { label: 'כבוי', value: 'off' },
+                        { label: 'עדין', value: 'subtle' },
+                        { label: 'רגיל', value: 'default' },
+                        { label: 'מלא', value: 'full' }
                     ]}
                 />
             </div>

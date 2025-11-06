@@ -13,6 +13,7 @@ import { RefreshIcon, FeedIcon, CloseIcon, SettingsIcon, SparklesIcon, CheckChec
 import { AppContext } from '../state/AppContext';
 import { useContextMenu } from '../hooks/useContextMenu';
 import KnowledgeGraph from '../components/KnowledgeGraph';
+import { useHaptics } from '../hooks/useHaptics';
 
 // --- New Batch Action Bar Component ---
 const BatchActionBar: React.FC<{
@@ -76,6 +77,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
   const { feedItems, spaces, isLoading, settings } = state;
   const { feedViewMode } = settings;
   const headerRef = useRef<HTMLElement>(null);
+  const { triggerHaptic } = useHaptics();
   
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
   const [isSummarizing, setIsSummarizing] = useState<string | null>(null);
@@ -234,7 +236,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
     const itemToDelete = feedItems.find(item => item.id === id);
     if (!itemToDelete) return;
     
-    if(window.navigator.vibrate) window.navigator.vibrate(50);
+    triggerHaptic('medium');
     
     await dataService.removeFeedItem(id);
     dispatch({ type: 'REMOVE_FEED_ITEM', payload: id });
@@ -246,7 +248,15 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
         dispatch({ type: 'ADD_FEED_ITEM', payload: itemToDelete });
     });
 
-  }, [feedItems, dispatch]);
+  }, [feedItems, dispatch, triggerHaptic]);
+
+  const handleDeleteWithConfirmation = useCallback((id: string) => {
+    const itemToDelete = feedItems.find(item => item.id === id);
+    if (itemToDelete && window.confirm(`האם למחוק את "${itemToDelete.title}"?`)) {
+        handleDeleteItem(id);
+        setSelectedItem(null); // Close modal
+    }
+  }, [feedItems, handleDeleteItem]);
 
   const handleAddToLibrary = useCallback((item: FeedItem) => {
     try {
@@ -265,7 +275,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
   // --- Batch Action Handlers ---
     const handleLongPress = (item: FeedItem) => {
         // Fi Principle: Holistic Feedback
-        if (window.navigator.vibrate) window.navigator.vibrate(50);
+        triggerHaptic('medium');
         setSelectionMode(true);
         setSelectedIds(new Set([item.id]));
     };
@@ -292,7 +302,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
     const handleBatchDelete = async () => {
         const itemsToDelete = Array.from(selectedIds).map(id => feedItems.find(item => item.id === id)).filter(Boolean) as FeedItem[];
         
-        if (window.navigator.vibrate) window.navigator.vibrate(100);
+        triggerHaptic('heavy');
 
         // Optimistically update the UI
         itemsToDelete.forEach(item => {
@@ -437,6 +447,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
         onClose={() => setSelectedItem(null)}
         onSummarize={handleSummarize}
         onUpdate={handleUpdateItem}
+        onDelete={handleDeleteWithConfirmation}
         isSummarizing={!!isSummarizing}
       />
       <SynthesisModal

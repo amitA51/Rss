@@ -43,6 +43,8 @@
         --dynamic-accent-glow: var(--accent-glow);
         --dynamic-accent-color: rgba(255, 217, 122, 0.1);
         --accent-gradient: linear-gradient(90deg, var(--dynamic-accent-start), var(--dynamic-accent-end));
+        
+        --font-scale: 1.0;
 
         --danger: #EF4444;
         --warning: #FBBF24;
@@ -50,6 +52,7 @@
 
         /* ustwo/AKQA Inspired Motion Curve */
         --fi-cubic-bezier: cubic-bezier(0.4, 0, 0.2, 1);
+        --fi-duration-factor: 1; /* For animation intensity */
       }
       
       .font-lato { --font-primary: 'Lato', sans-serif; }
@@ -58,6 +61,12 @@
       .font-heebo { --font-primary: 'Heebo', sans-serif; }
       .font-rubik { --font-primary: 'Rubik', sans-serif; }
       .font-alef { --font-primary: 'Alef', sans-serif; }
+      
+      /* Animation Intensity Classes */
+      body.animations-off { --fi-duration-factor: 0; }
+      body.animations-subtle { --fi-duration-factor: 0.5; }
+      body.animations-default { --fi-duration-factor: 1; }
+      body.animations-full { --fi-duration-factor: 1.5; }
 
       body {
         font-family: var(--font-primary);
@@ -66,7 +75,8 @@
         position: relative;
         overflow-x: hidden;
         line-height: 1.6;
-        transition: background-color 0.5s ease-out;
+        font-size: calc(1rem * var(--font-scale));
+        transition: background-color calc(0.5s * var(--fi-duration-factor)) ease-out;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         text-rendering: optimizeLegibility;
@@ -156,7 +166,7 @@
       /* Base card style for components */
       .themed-card {
         border-radius: 20px;
-        transition: border-color 0.3s, box-shadow 0.3s, transform 0.25s var(--fi-cubic-bezier), background-color 0.3s, padding 0.3s, opacity 0.4s;
+        transition: border-color calc(0.3s * var(--fi-duration-factor)), box-shadow calc(0.3s * var(--fi-duration-factor)), transform calc(0.25s * var(--fi-duration-factor)) var(--fi-cubic-bezier), background-color calc(0.3s * var(--fi-duration-factor)), padding calc(0.3s * var(--fi-duration-factor)), opacity calc(0.4s * var(--fi-duration-factor));
       }
       /* Tap State - Holistic Feedback */
       .themed-card:active {
@@ -224,11 +234,11 @@
         filter: blur(12px);
         opacity: 0.6;
         pointer-events: none;
-        transition: transform 0.4s var(--fi-cubic-bezier), filter 0.4s var(--fi-cubic-bezier), opacity 0.4s var(--fi-cubic-bezier);
+        transition: transform calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier), filter calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier), opacity calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier);
       }
 
 
-      /* --- FANTASY (Fi) ANIMATIONS - Cinematic Motion --- */
+      /* --- FANTASY (Fi) ANIMATIONS - Cinematic & RESPONSIVE Motion --- */
       @keyframes screen-enter {
         from {
           opacity: 0;
@@ -240,7 +250,7 @@
         }
       }
       .animate-screen-enter {
-        animation: screen-enter 0.4s var(--fi-cubic-bezier) forwards;
+        animation: screen-enter calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
       }
       
       @keyframes item-enter-fi {
@@ -248,26 +258,18 @@
         to { opacity: 1; transform: translateY(0); }
       }
       .animate-item-enter-fi {
-        animation: item-enter-fi 0.4s var(--fi-cubic-bezier) both;
+        animation: item-enter-fi calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) both;
       }
+      
+      /* Responsive Modal Animations */
+      @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+      @keyframes modal-scale-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+      @keyframes modal-slide-in-mobile { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes modal-slide-out-mobile { from { transform: translateY(0); } to { transform: translateY(100%); } }
 
-      @keyframes modal-expand-in {
-        from { transform: translateY(100%); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      .animate-modal-expand-in { animation: modal-expand-in 0.4s var(--fi-cubic-bezier) forwards; }
-
-      @keyframes slide-down-out {
-          from { transform: translateY(0); opacity: 1; }
-          to { transform: translateY(100%); opacity: 0; }
-      }
-      .animate-slide-down-out { animation: slide-down-out 0.3s cubic-bezier(0.6, 0, 0.8, 0) forwards; }
-
-      @keyframes slide-up-in {
-          from { transform: translateY(100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-      }
-      .animate-slide-up-in { animation: slide-up-in 0.4s var(--fi-cubic-bezier) forwards; }
+      /* Base animation (desktop) */
+      .animate-modal-enter { animation: modal-scale-in calc(0.3s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
+      .animate-modal-exit { animation: modal-scale-out calc(0.25s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
 
 
       /* Task item strikethrough animation */
@@ -279,7 +281,7 @@
         height: 1.5px;
         background-color: var(--text-secondary);
         width: 0;
-        transition: width 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        transition: width calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.68, -0.55, 0.27, 1.55);
       }
       .task-completed .task-text::after {
         width: 100%;
@@ -306,7 +308,7 @@
           rgba(255, 255, 255, 0.08) 60%,
           rgba(255, 255, 255, 0)
         );
-        animation: shimmer 2.5s infinite;
+        animation: shimmer calc(2.5s * var(--fi-duration-factor)) infinite;
       }
       
       /* Custom Checkbox Animation */
@@ -316,7 +318,7 @@
         100% { transform: scale(1); }
       }
       .animate-check-bounce {
-        animation: check-bounce 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        animation: check-bounce calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.175, 0.885, 0.32, 1.275);
       }
 
       /* Streak bump animation */
@@ -327,7 +329,7 @@
       }
       .animate-bump-up {
         display: inline-block;
-        animation: bump-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: bump-up calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.34, 1.56, 0.64, 1);
       }
 
       /* Habit celebration sparkles - more dynamic */
@@ -340,14 +342,15 @@
         position: absolute;
         background-color: var(--dynamic-accent-highlight);
         border-radius: 50%;
-        animation: sparkle-animation 0.8s ease-out forwards;
+        animation: sparkle-animation calc(0.8s * var(--fi-duration-factor)) ease-out forwards;
         box-shadow: 0 0 6px var(--dynamic-accent-highlight), 0 0 12px var(--dynamic-accent-highlight);
       }
       
       /* Style for completed items */
       .completed-item, .completed-habit {
         opacity: 0.5;
-        transition: opacity 0.3s, transform 0.3s;
+        transform: scale(0.98);
+        transition: opacity calc(0.4s * var(--fi-duration-factor)), transform calc(0.4s * var(--fi-duration-factor));
       }
       .completed-item:hover, .completed-habit:hover {
           opacity: 0.7;
@@ -387,12 +390,50 @@
 
       /* Selection Mode Styles */
       .selection-mode .themed-card {
-          transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+          transition: transform calc(0.2s * var(--fi-duration-factor)), box-shadow calc(0.2s * var(--fi-duration-factor)), border-color calc(0.2s * var(--fi-duration-factor));
       }
       .selection-mode .themed-card.selected {
           transform: scale(0.97);
           border-color: var(--dynamic-accent-start) !important;
           box-shadow: 0 0 20px var(--dynamic-accent-glow);
+      }
+      
+      /* --- Mobile Responsiveness --- */
+      .app-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      @media (max-width: 639px) {
+        .app-container {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        .responsive-modal {
+            width: 100%;
+            max-width: 100%;
+            height: 100%;
+            max-height: 100%;
+            border-radius: 0 !important;
+        }
+        .responsive-modal header {
+            border-radius: 0 !important;
+        }
+        /* Mobile-specific animations */
+        .animate-modal-enter { animation: modal-slide-in-mobile calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
+        .animate-modal-exit { animation: modal-slide-out-mobile calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.6, 0, 0.8, 0) forwards; }
+
+        /* Reduce padding on cards for mobile */
+        .density-comfortable .themed-card { padding: 1rem; }
+        .density-compact .themed-card { padding: 0.75rem; }
+
+        /* Increase touch targets in headers */
+        header button {
+            padding: 0.75rem;
+        }
+        header button.p-1, header button.p-2, header button.p-3 {
+            padding: 0.75rem !important;
+        }
       }
 
     </style>

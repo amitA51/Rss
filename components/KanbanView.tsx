@@ -16,6 +16,7 @@ interface KanbanViewProps {
   items: PersonalItem[];
   onUpdate: (id: string, updates: Partial<PersonalItem>) => void;
   onSelectItem: (item: PersonalItem, event: React.MouseEvent) => void;
+  onDelete: (id: string) => void;
   onQuickAdd: (config: { type: AddableType; defaultStatus: Status }) => void;
 }
 
@@ -26,7 +27,7 @@ const getItemStatus = (item: PersonalItem): Status => {
   return 'todo';
 };
 
-const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, onQuickAdd }) => {
+const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, onQuickAdd, onDelete }) => {
   const [draggedItem, setDraggedItem] = useState<PersonalItem | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<Status | null>(null);
 
@@ -100,11 +101,11 @@ const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, 
                 index={index}
                 onSelect={onSelectItem}
                 onUpdate={onUpdate}
+                onDelete={onDelete}
                 onContextMenu={() => {}} // Context menu is complex here, disable for now
                 onDragStart={(e, i) => handleDragStart(e, i)}
                 isDragging={draggedItem?.id === item.id}
-                // FIX: Added missing required props for PersonalItemCard.
-                onLongPress={() => {}}
+                onLongPress={(_item: PersonalItem) => { /* Not used in Kanban view */ }}
                 isInSelectionMode={false}
                 isSelected={false}
               />

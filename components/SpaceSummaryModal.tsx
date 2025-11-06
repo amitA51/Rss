@@ -13,10 +13,10 @@ const SpaceSummaryModal: React.FC<SpaceSummaryModalProps> = ({ summary, onClose,
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={onClose}>
       <div 
-        className="bg-[var(--bg-secondary)] w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col transform animate-modal-expand-in border-t border-[var(--border-primary)]"
+        className="bg-[var(--bg-secondary)] w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] animate-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm z-10">
+        <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm z-10 rounded-t-3xl">
           <h2 className="text-xl font-bold themed-title flex items-center gap-2">
             <SparklesIcon className="w-6 h-6" />
             סיכום AI עבור "{spaceName}"

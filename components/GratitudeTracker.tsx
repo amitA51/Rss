@@ -3,9 +3,10 @@ import { addPersonalItem } from '../services/dataService';
 import { AppContext } from '../state/AppContext';
 import type { PersonalItem } from '../types';
 import { SparklesIcon } from './icons';
+import LoadingSpinner from './LoadingSpinner';
 
 const inputStyles = "w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50 focus:border-[var(--dynamic-accent-start)] transition-shadow";
-const buttonStyles = "mt-4 w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]";
+const buttonStyles = "mt-4 w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)] flex items-center justify-center h-12";
 
 const GratitudeTracker: React.FC = () => {
     const { state, dispatch } = useContext(AppContext);
@@ -76,7 +77,7 @@ const GratitudeTracker: React.FC = () => {
                 ))}
             </div>
             <button onClick={handleSave} disabled={isSubmitting || inputs.some(i => !i.trim())} className={buttonStyles}>
-                {isSubmitting ? 'שומר...' : 'שמור הכרת תודה'}
+                {isSubmitting ? <LoadingSpinner /> : 'שמור הכרת תודה'}
             </button>
         </section>
     );

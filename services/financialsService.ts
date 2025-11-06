@@ -1,7 +1,7 @@
 import type { WatchlistItem, FinancialAsset } from '../types';
 
 // New API Key for Finnhub (for news and stock charts)
-const FINNHUB_API_KEY = 'c1p3122ad3ifd2rggrj0'; // Public sandbox key
+const FINNHUB_API_KEY = 'c8362eaad3i2b45e72d0'; // Public sandbox key, replaced old one
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 // API Key for Massive.com (for stock prices)
@@ -11,6 +11,17 @@ const MASSIVE_WS_URL = 'wss://delayed.massive.com/stocks';
 // Kept for Crypto Data
 const FREECRYPTOAPI_KEY = 'l6hhtilmoel0d5ypd172';
 const FREECRYPTO_BASE_URL = 'https://api.freecryptoapi.com/v1';
+
+
+// --- Type Definitions ---
+export interface NewsItem {
+    id: number;
+    headline: string;
+    summary: string;
+    url: string;
+    source: string;
+    datetime: number;
+}
 
 
 // --- Data Fetching Functions ---
@@ -188,7 +199,7 @@ export async function fetchAssetDailyChart(asset: WatchlistItem): Promise<{ time
         const historyData = await fetchData(historyUrl);
         const points: { time: number, price: number }[] = [];
         if (historyData.status === 'success' && historyData.result) {
-            historyData.result.forEach((d: any) => {
+            historyData.result.forEach((d: { time_close: number, close: string }) => {
                 points.push({ time: d.time_close * 1000, price: parseFloat(d.close) });
             });
         }
@@ -203,7 +214,7 @@ export async function fetchAssetDailyChart(asset: WatchlistItem): Promise<{ time
 /**
  * Fetches news for a given stock or crypto ticker using Finnhub.
  */
-export async function fetchNewsForTicker(ticker: string, type: 'stock' | 'crypto'): Promise<any[]> {
+export async function fetchNewsForTicker(ticker: string, type: 'stock' | 'crypto'): Promise<NewsItem[]> {
     const today = new Date();
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(today.getDate() - 7);
@@ -221,16 +232,9 @@ export async function fetchNewsForTicker(ticker: string, type: 'stock' | 'crypto
     }
 
     try {
-        const news = await fetchData(url);
+        const news: NewsItem[] = await fetchData(url);
         // Limit to 5 articles to avoid clutter
-        return (news || []).slice(0, 5).map((item: any) => ({
-             id: item.id,
-             headline: item.headline,
-             summary: item.summary,
-             url: item.url,
-             source: item.source,
-             datetime: item.datetime
-        }));
+        return (news || []).slice(0, 5);
     } catch (error) {
         console.error(`Failed to fetch news for: ${ticker}`, error);
         return [];

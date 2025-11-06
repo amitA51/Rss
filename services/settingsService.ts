@@ -1,5 +1,6 @@
-import type { AppSettings, Screen, HomeScreenComponent, ThemeSettings, UiDensity } from '../types';
+import type { AppSettings, Screen, HomeScreenComponent, ThemeSettings, UiDensity, AddableType, AnimationIntensity, AiPersonality } from '../types';
 import { LOCAL_STORAGE_KEYS as LS } from '../constants';
+import { PERSONAL_ITEM_TYPES } from '../constants';
 
 const defaultThemes: Record<string, ThemeSettings> = {
     gold: { name: 'Gold', accentColor: '#E5B84B', font: 'inter', cardStyle: 'glass', backgroundEffect: true },
@@ -9,6 +10,11 @@ const defaultThemes: Record<string, ThemeSettings> = {
     oceanic: { name: 'Oceanic', accentColor: '#3B82F6', font: 'inter', cardStyle: 'flat', backgroundEffect: false },
 };
 
+const defaultAddScreenLayout: AddableType[] = [
+    'spark', 'task', 'note', 'link', 'idea', 'learning', 
+    'book', 'journal', 'workout', 'goal', 'roadmap', 'ticker'
+];
+
 const defaultSettings: AppSettings = {
   aiModel: 'gemini-2.5-flash',
   autoSummarize: false,
@@ -17,11 +23,12 @@ const defaultSettings: AppSettings = {
   notificationsEnabled: false,
   lastAddedType: 'task',
   enableIntervalTimer: true,
-  enablePeriodicSync: false, // Added default value
+  enablePeriodicSync: false,
   uiDensity: 'comfortable',
   navBarLayout: ['feed', 'today', 'add', 'investments', 'library'],
   enabledMentorIds: [],
   feedViewMode: 'list',
+  enableHabitReminders: true,
   screenLabels: {
     feed: 'פיד',
     today: 'היום',
@@ -45,6 +52,18 @@ const defaultSettings: AppSettings = {
     gratitude: 'הכרת תודה',
     habits: 'הרגלים להיום',
     tasks: 'משימות פתוחות',
+  },
+  // New Personalization Settings
+  hapticFeedback: true,
+  animationIntensity: 'default',
+  fontSizeScale: 1.0,
+  addScreenLayout: defaultAddScreenLayout,
+  aiPersonality: 'encouraging',
+  pomodoroSettings: {
+      workDuration: 25,
+      shortBreak: 5,
+      longBreak: 15,
+      sessionsUntilLongBreak: 4,
   },
 };
 
@@ -90,6 +109,15 @@ export const loadSettings = (): AppSettings => {
           parsed.themeSettings = defaultThemes[parsed.theme as keyof typeof defaultThemes] || defaultThemes.gold;
           delete parsed.theme;
       }
+
+      // MIGRATION: Ensure addScreenLayout contains all possible types for existing users
+      if (parsed.addScreenLayout) {
+          const userLayoutSet = new Set(parsed.addScreenLayout);
+          const newItems = defaultAddScreenLayout.filter(item => !userLayoutSet.has(item));
+          if (newItems.length > 0) {
+              parsed.addScreenLayout = [...parsed.addScreenLayout, ...newItems];
+          }
+      }
       
       // Merge with defaults to ensure new settings are applied
       return { 
@@ -100,9 +128,9 @@ export const loadSettings = (): AppSettings => {
           intervalTimerSettings: { ...defaultSettings.intervalTimerSettings, ...parsed.intervalTimerSettings },
           sectionLabels: { ...defaultSettings.sectionLabels, ...parsed.sectionLabels },
           homeScreenLayout: parsed.homeScreenLayout ? mergeLayouts(parsed.homeScreenLayout, defaultSettings.homeScreenLayout) : defaultSettings.homeScreenLayout,
-          // FIX: Ensure navBarLayout is an array before using it.
           navBarLayout: (Array.isArray(parsed.navBarLayout) && parsed.navBarLayout.length > 0) ? parsed.navBarLayout : defaultSettings.navBarLayout,
           enabledMentorIds: parsed.enabledMentorIds || [],
+          pomodoroSettings: { ...defaultSettings.pomodoroSettings, ...parsed.pomodoroSettings },
       };
     }
   } catch (error) {

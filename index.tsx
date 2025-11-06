@@ -39,7 +39,22 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       return (
         <div style={{ padding: '2rem', textAlign: 'center', color: 'white' }}>
             <h1>משהו השתבש.</h1>
-            <p>נסה לרענן את הדף. אם הבעיה נמשכת, נסה לאפס את נתוני האפליקקציה.</p>
+            <p>אפשר לנסות לרענן את הדף. אם הבעיה נמשכת, אפשר לאפס את נתוני האפליקציה.</p>
+             <button
+                onClick={() => window.location.reload()}
+                style={{
+                    marginTop: '1.5rem',
+                    padding: '0.75rem 1.5rem',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '9999px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                }}
+            >
+                רענן עמוד
+            </button>
         </div>
       );
     }
@@ -65,7 +80,7 @@ if (rootElement) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then(registration => {
         // Store the registration for later use (e.g., periodic sync)
-        (window as any).swRegistration = registration;
+        window.swRegistration = registration;
         console.log('SW registered: ', registration);
       }).catch(registrationError => {
         console.log('SW registration failed: ', registrationError);

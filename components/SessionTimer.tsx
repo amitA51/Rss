@@ -8,43 +8,48 @@ interface SessionTimerProps {
   onEndSession: (loggedDuration?: number, isCancel?: boolean) => void;
 }
 
-type IntervalType = 'work' | 'rest';
-
-const POMODORO_DURATION = 25 * 60; // 25 minutes in seconds
+type IntervalType = 'work' | 'short-break' | 'long-break' | 'workout-set';
 
 const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
     const { state } = useContext(AppContext);
-    const { intervalTimerSettings } = state.settings;
+    const { intervalTimerSettings, pomodoroSettings } = state.settings;
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isPomodoro = item.type !== 'workout';
 
     const sessionPlan = useMemo(() => {
-        if (isPomodoro) {
-            return [{ type: 'work' as IntervalType, duration: POMODORO_DURATION, label: 'פוקוס' }];
-        }
-        
-        // Workout plan logic
         const plan: { type: IntervalType; duration: number; label: string }[] = [];
-        if (item.exercises && item.exercises.length > 0) {
-            item.exercises.forEach((ex, exIndex) => {
-                for (let i = 0; i < ex.sets.length; i++) {
-                    plan.push({ type: 'work', duration: 0, label: `${ex.name} - סט ${i + 1}` });
-                    if (i < ex.sets.length - 1) {
-                        plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration, label: 'מנוחה' });
+        if (isPomodoro) {
+            for (let i = 1; i <= pomodoroSettings.sessionsUntilLongBreak; i++) {
+                plan.push({ type: 'work', duration: pomodoroSettings.workDuration * 60, label: `פוקוס #${i}`});
+                if (i < pomodoroSettings.sessionsUntilLongBreak) {
+                    plan.push({ type: 'short-break', duration: pomodoroSettings.shortBreak * 60, label: 'הפסקה קצרה'});
+                } else {
+                    plan.push({ type: 'long-break', duration: pomodoroSettings.longBreak * 60, label: 'הפסקה ארוכה'});
+                }
+            }
+        } else { // Workout plan logic
+            if (item.exercises && item.exercises.length > 0) {
+                item.exercises.forEach((ex, exIndex) => {
+                    for (let i = 0; i < ex.sets.length; i++) {
+                        plan.push({ type: 'workout-set', duration: 0, label: `${ex.name} - סט ${i + 1}` });
+                        if (i < ex.sets.length - 1) {
+                            plan.push({ type: 'short-break', duration: intervalTimerSettings.restDuration, label: 'מנוחה' });
+                        }
                     }
-                }
-                if (exIndex < item.exercises!.length - 1) {
-                    plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration * 2, label: 'מנוחה בין תרגילים' });
-                }
-            });
+                    if (exIndex < item.exercises!.length - 1) {
+                        plan.push({ type: 'long-break', duration: intervalTimerSettings.restDuration * 2, label: 'מנוחה בין תרגילים' });
+                    }
+                });
+            }
         }
         return plan;
-    }, [item, intervalTimerSettings, isPomodoro]);
+    }, [item, intervalTimerSettings, pomodoroSettings, isPomodoro]);
 
     const [currentIntervalIndex, setCurrentIntervalIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState(sessionPlan[0].duration);
     const [isRunning, setIsRunning] = useState(true);
     const [isFinished, setIsFinished] = useState(false);
+    const [totalWorkSeconds, setTotalWorkSeconds] = useState(0);
     
     const currentInterval = sessionPlan[currentIntervalIndex];
 
@@ -56,19 +61,18 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
             setIsFinished(true);
             if (audioRef.current) audioRef.current.play();
             if (isPomodoro) {
-                // Automatically log and end for Pomodoro
-                onEndSession(25);
+                onEndSession(Math.round(totalWorkSeconds / 60));
             }
         } else {
             const nextIndex = currentIntervalIndex + 1;
             setCurrentIntervalIndex(nextIndex);
             const nextInterval = sessionPlan[nextIndex];
             setTimeLeft(nextInterval.duration);
-            if (nextInterval.duration > 0 && intervalTimerSettings.autoStartNext) {
+            if (nextInterval.duration > 0 && (intervalTimerSettings.autoStartNext || isPomodoro)) {
                 setIsRunning(true);
             }
         }
-    }, [currentIntervalIndex, sessionPlan, intervalTimerSettings.autoStartNext, isPomodoro, onEndSession]);
+    }, [currentIntervalIndex, sessionPlan, intervalTimerSettings.autoStartNext, isPomodoro, onEndSession, totalWorkSeconds]);
 
     useEffect(() => {
         audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
@@ -86,12 +90,16 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
 
 
     useEffect(() => {
-        if (!isRunning || timeLeft <= 0 || isFinished) return;
+        if (!isRunning || isFinished) return;
 
         const timer = setInterval(() => {
             setTimeLeft(prev => {
+                 if (currentInterval.type === 'work') {
+                    setTotalWorkSeconds(s => s + 1);
+                }
                 if (prev <= 1) {
                     clearInterval(timer);
+                    if (audioRef.current) audioRef.current.play();
                     advanceToNextInterval();
                     return 0;
                 }
@@ -100,7 +108,7 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [isRunning, timeLeft, advanceToNextInterval, isFinished]);
+    }, [isRunning, advanceToNextInterval, isFinished, currentInterval.type]);
 
     const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
     const seconds = String(timeLeft % 60).padStart(2, '0');
@@ -109,25 +117,27 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
     const strokeDashoffset = circumference * (1 - progress);
 
     const handlePlayPause = () => {
-        if (currentInterval.duration > 0) {
-            setIsRunning(!isRunning);
-        } else { // "work" interval in a workout
+        if (currentInterval.type === 'workout-set') { // Manual start for workout set
             advanceToNextInterval();
+        } else {
+            setIsRunning(!isRunning);
         }
     }
     
     // For non-pomodoro, user clicks this to finish
     const handleFinishWorkout = () => {
-        onEndSession();
+        onEndSession(Math.round(totalWorkSeconds / 60));
     }
     
     // User cancels session, no time logged
     const handleCancelSession = () => {
         onEndSession(undefined, true);
     }
+    
+    const isBreak = currentInterval.type.includes('break');
 
     return (
-        <div className="fixed inset-0 bg-[var(--bg-primary)] z-50 flex flex-col items-center justify-between p-8 text-white animate-screen-enter">
+        <div className={`fixed inset-0 bg-[var(--bg-primary)] z-50 flex flex-col items-center justify-between p-8 text-white animate-screen-enter transition-colors duration-500 ${isBreak ? 'bg-blue-900/20' : ''}`}>
             <div className="text-center">
                 <h1 className="text-4xl font-bold">{item.title}</h1>
                 <p className="text-xl text-[var(--text-secondary)] mt-2">{isFinished ? "הסשן הושלם!" : currentInterval.label}</p>
@@ -137,7 +147,7 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
                 <svg className="w-full h-full" viewBox="0 0 250 250">
                     <circle className="text-white/10" stroke="currentColor" strokeWidth="8" fill="transparent" r="120" cx="125" cy="125" />
                     <circle 
-                        stroke="url(#progress-gradient)"
+                        stroke={isBreak ? "#60A5FA" : "url(#progress-gradient)"}
                         strokeWidth="8" fill="transparent" r="120" cx="125" cy="125" 
                         strokeLinecap="round"
                         transform="rotate(-90 125 125)"
@@ -154,21 +164,15 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
                     {currentInterval.duration > 0 && !isFinished && (
                         <span className="font-mono font-bold text-8xl tracking-tighter">{minutes}:{seconds}</span>
                     )}
-                     {isFinished && !isPomodoro && <span className="text-6xl font-bold">מעולה!</span>}
-                     {currentInterval.duration === 0 && !isFinished && <span className="text-5xl font-bold">מוכן?</span>}
+                     {isFinished && <span className="text-6xl font-bold">מעולה!</span>}
+                     {currentInterval.type === 'workout-set' && !isFinished && <span className="text-5xl font-bold">מוכן?</span>}
                 </div>
             </div>
 
-            {isFinished && !isPomodoro ? (
-                 <button onClick={handleFinishWorkout} className="bg-[var(--accent-gradient)] text-black font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95 shadow-[0_4px_20px_var(--dynamic-accent-glow)]">
+            {isFinished ? (
+                 <button onClick={() => onEndSession(Math.round(totalWorkSeconds/60))} className="bg-[var(--accent-gradient)] text-black font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95 shadow-[0_4px_20px_var(--dynamic-accent-glow)]">
                     סיים וחזור
                 </button>
-            ) : isPomodoro ? (
-                 <div className="h-24 flex items-center">
-                    <button onClick={handleCancelSession} className="bg-white/10 text-white font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95">
-                        הפסק סשן
-                    </button>
-                 </div>
             ) : (
                 <div className="flex items-center justify-center gap-6">
                      <button onClick={handleCancelSession} className="bg-white/10 text-white p-5 rounded-full transition-transform transform active:scale-95">

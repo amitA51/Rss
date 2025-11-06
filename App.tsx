@@ -10,6 +10,7 @@ import { RefreshIcon } from './components/icons';
 import * as dataService from './services/dataService';
 import { generatePalette } from './services/styleUtils';
 import StatusMessage, { StatusMessageType } from './components/StatusMessage';
+import { useHabitReminders } from './hooks/useHabitReminders';
 
 
 // --- Polished Loading Component ---
@@ -46,10 +47,13 @@ const InvestmentsScreen = lazy(() => import('./screens/InvestmentsScreen'));
 const ThemedApp: React.FC = () => {
     const { state, dispatch } = useContext(AppContext);
     const { settings, focusSession } = state;
-    const { themeSettings, uiDensity } = settings;
+    const { themeSettings, uiDensity, animationIntensity, fontSizeScale } = settings;
     const [activeScreen, setActiveScreen] = useState<Screen>(state.settings.defaultScreen);
     const [updateAvailable, setUpdateAvailable] = useState<ServiceWorker | null>(null);
     const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => Promise<void> | void} | null>(null);
+
+    // Schedule habit reminders
+    useHabitReminders();
 
     const showStatus = (type: StatusMessageType, text: string, onUndo?: () => Promise<void> | void) => {
         setStatusMessage({ type, text, id: Date.now(), onUndo });
@@ -84,8 +88,15 @@ const ThemedApp: React.FC = () => {
         body.classList.remove('density-comfortable', 'density-compact');
         body.classList.add(`density-${uiDensity}`);
 
+        // Apply Animation Intensity
+        body.classList.remove('animations-off', 'animations-subtle', 'animations-default', 'animations-full');
+        body.classList.add(`animations-${animationIntensity}`);
 
-    }, [themeSettings, uiDensity]);
+        // Apply Font Size Scale
+        root.style.setProperty('--font-scale', fontSizeScale.toString());
+
+
+    }, [themeSettings, uiDensity, animationIntensity, fontSizeScale]);
 
     // Update app badge whenever unread feed items change
     useEffect(() => {
@@ -187,7 +198,7 @@ const ThemedApp: React.FC = () => {
     }
 
     return (
-        <div className="max-w-2xl mx-auto px-4 pb-24">
+        <div className="max-w-2xl mx-auto app-container pb-24 overflow-x-hidden">
             {themeSettings.backgroundEffect && <DynamicBackground />}
             <main>
                 <Suspense fallback={<AppLoading />}>

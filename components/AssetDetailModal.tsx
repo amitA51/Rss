@@ -96,10 +96,10 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ asset, onClose }) =
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={handleClose}>
             <div 
-                className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] ${isClosing ? 'animate-slide-down-out' : 'animate-modal-expand-in'}`}
+                className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] ${isClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
                 onClick={(e) => e.stopPropagation()}
             >
-                <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-transparent backdrop-blur-sm z-10">
+                <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-transparent backdrop-blur-sm z-10 rounded-t-3xl">
                     <div>
                         <h2 className="text-xl font-bold themed-title">{asset.name}</h2>
                         <p className="text-sm text-gray-400">{asset.ticker}</p>
