@@ -2,7 +2,7 @@ import type { AppSettings, Screen, HomeScreenComponent, ThemeSettings, UiDensity
 import { LOCAL_STORAGE_KEYS as LS } from '../constants';
 
 const defaultThemes: Record<string, ThemeSettings> = {
-    gold: { name: 'Gold', accentColor: '#C67C3E', font: 'inter', cardStyle: 'glass', backgroundEffect: true },
+    gold: { name: 'Gold', accentColor: '#E5B84B', font: 'inter', cardStyle: 'glass', backgroundEffect: true },
     crimson: { name: 'Crimson', accentColor: '#DC2626', font: 'lato', cardStyle: 'bordered', backgroundEffect: false },
     emerald: { name: 'Emerald', accentColor: '#059669', font: 'inter', cardStyle: 'flat', backgroundEffect: true },
     nebula: { name: 'Nebula', accentColor: '#8B5CF6', font: 'source-code-pro', cardStyle: 'glass', backgroundEffect: true },

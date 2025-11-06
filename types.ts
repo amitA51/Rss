@@ -162,7 +162,7 @@ export interface Template {
 // --- New Types for Settings and Data Management ---
 
 export type AddableType = PersonalItemType | 'spark' | 'ticker';
-export type AppFont = 'inter' | 'lato' | 'source-code-pro';
+export type AppFont = 'inter' | 'lato' | 'source-code-pro' | 'heebo' | 'rubik' | 'alef';
 export type CardStyle = 'glass' | 'flat' | 'bordered';
 export type HomeScreenComponentId = 'gratitude' | 'habits' | 'tasks';
 export type UiDensity = 'comfortable' | 'compact';

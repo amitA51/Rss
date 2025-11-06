@@ -67,24 +67,21 @@ const stripHtml = (htmlString: string): string => {
  * @returns A sanitized XML string.
  */
 const sanitizeXmlBeforeParsing = (xmlString: string): string => {
-    // 1. Fix unescaped ampersands which are not part of a valid entity.
-    let sanitized = xmlString.replace(/&(?![a-zA-Z#0-9]+;)/g, '&amp;');
-    
-    // 2. Fix boolean attributes (like 'async') that don't have values, which is invalid in XML.
-    const booleanAttributes = ['async', 'defer', 'autoplay', 'controls', 'loop', 'muted', 'playsinline', 'readonly', 'required', 'selected', 'disabled', 'multiple', 'checked'];
-    for (const attr of booleanAttributes) {
-        const regex = new RegExp(`\\s(${attr})(?=[\\s>])`, 'gi');
-        sanitized = sanitized.replace(regex, ` $1="$1"`);
-    }
+    // 1. Remove non-standard control characters that can break XML parsers.
+    let sanitized = xmlString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 
-    // 3. Fix unquoted attribute values (e.g., attr=value -> attr="value")
-    // This is a common issue in malformed RSS feeds and caused the "AttValue: " or ' expected" error.
-    sanitized = sanitized.replace(/(\s[\w:-]+)=((?!(["']))[^>\s]+)/g, '$1="$2"');
-
-    // 4. Remove XML namespaces from tags (e.g., <dc:creator> -> <creator>) to improve parser compatibility.
-    sanitized = sanitized.replace(/<(\/?)([\w-]*):([\w-]+)/g, '<$1$3');
+    // 2. Fix unescaped ampersands which are not part of a valid entity.
+    sanitized = sanitized.replace(/&(?!(?:[a-z]+|#[0-9]+);)/gi, '&amp;');
     
-    // 5. Remove namespace definitions from attributes (e.g., xmlns:dc="http://purl.org/dc/elements/1.1/").
+    // 3. Fix unquoted attribute values. This is a common issue in feeds like darkreading.
+    // e.g., <rss version=2.0> becomes <rss version="2.0">
+    // It looks for ` attribute=` or `<tag attribute=` followed by a value that is not quoted.
+    sanitized = sanitized.replace(/([<\s][a-zA-Z0-9:-]+)=((?![ '"])[^\s>]+)/g, '$1="$2"');
+
+    // 4. Remove XML namespaces from tags (e.g., <dc:creator> -> <creator>) for simplicity.
+    sanitized = sanitized.replace(/<(\/?)([\w-]+):([\w-]+)/g, '<$1$3');
+    
+    // 5. Remove namespace definitions from attributes (e.g., xmlns:dc="...").
     sanitized = sanitized.replace(/\sxmlns(:\w+)?="[^"]+"/g, '');
 
     return sanitized;

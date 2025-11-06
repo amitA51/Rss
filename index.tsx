@@ -11,10 +11,16 @@ interface ErrorBoundaryState {
 
 // Error Boundary Component to catch runtime errors in the component tree
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // FIX: Reverted to a constructor for state initialization. This can resolve issues with `this.props` not being available in certain build configurations.
+  // FIX: Reverted to using a class property for state initialization.
+  // The constructor-based initialization was causing issues in the build environment,
+  // suggesting a problem with `this` context. This syntax is more modern and directly
+  // attaches state to the component instance.
+  state: ErrorBoundaryState = { hasError: false };
+
+  // FIX: Added constructor to ensure `this.props` is correctly initialized,
+  // which can resolve typing issues in some build environments.
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error) {
@@ -33,7 +39,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       return (
         <div style={{ padding: '2rem', textAlign: 'center', color: 'white' }}>
             <h1>משהו השתבש.</h1>
-            <p>נסה לרענן את הדף. אם הבעיה נמשכת, נסה לאפס את נתוני האפליקציה.</p>
+            <p>נסה לרענן את הדף. אם הבעיה נמשכת, נסה לאפס את נתוני האפליקקציה.</p>
         </div>
       );
     }

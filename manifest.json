@@ -4,13 +4,13 @@
   "description": "A zero-maintenance personal terminal for your thoughts and feeds. Dark mode only, Hebrew UI, powered by AI for summarization and tagging.",
   "icons": [
     {
-      "src": "/images/resized-image.png",
+      "src": "/images/spark192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/images/480538-512x512.png",
+      "src": "/images/spark512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

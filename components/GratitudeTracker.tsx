@@ -5,7 +5,7 @@ import type { PersonalItem } from '../types';
 import { SparklesIcon } from './icons';
 
 const inputStyles = "w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50 focus:border-[var(--dynamic-accent-start)] transition-shadow";
-const buttonStyles = "mt-4 w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-2xl transition-all transform active:scale-95 disabled:opacity-50";
+const buttonStyles = "mt-4 w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]";
 
 const GratitudeTracker: React.FC = () => {
     const { state, dispatch } = useContext(AppContext);
@@ -22,13 +22,17 @@ const GratitudeTracker: React.FC = () => {
         setTodayGratitude(found || null);
     }, [state.personalItems]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (inputs.some(i => i.trim() === '')) {
             alert("אנא מלא את כל שלושת הדברים שאתה מודה עליהם.");
             return;
         }
         setIsSubmitting(true);
-        const newItem = addPersonalItem({
+        if (window.navigator.vibrate) {
+            window.navigator.vibrate(50);
+        }
+        // FIX: Await the async data service call to get the created item.
+        const newItem = await addPersonalItem({
             type: 'gratitude',
             title: `הכרת תודה - ${new Date().toLocaleDateString('he-IL')}`,
             content: inputs.join('\n'),

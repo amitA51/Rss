@@ -103,6 +103,10 @@ const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, 
                 onContextMenu={() => {}} // Context menu is complex here, disable for now
                 onDragStart={(e, i) => handleDragStart(e, i)}
                 isDragging={draggedItem?.id === item.id}
+                // FIX: Added missing required props for PersonalItemCard.
+                onLongPress={() => {}}
+                isInSelectionMode={false}
+                isSelected={false}
               />
             ))}
              {dragOverColumn === status && <div className="dragging-placeholder"></div>}

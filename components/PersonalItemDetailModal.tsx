@@ -901,7 +901,7 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
                 <StarIcon filled={!!item.isImportant} className="h-6 w-6" />
             </button>
             <button onClick={handleClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95">
-                <CloseIcon className="w-6 w-6" />
+                <CloseIcon className="h-6 w-6" />
             </button>
           </div>
         </header>
@@ -936,7 +936,7 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
         
         <footer className="p-4 border-t border-[var(--border-primary)] sticky bottom-0 bg-[var(--bg-secondary)]/80 backdrop-blur-sm flex justify-center items-center">
             {showSessionButton && (
-                <button onClick={() => setViewMode('session')} className="bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-6 rounded-2xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/20 flex items-center gap-2">
+                <button onClick={() => setViewMode('session')} className="bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-6 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/20 hover:shadow-[0_0_20px_var(--dynamic-accent-glow)] flex items-center gap-2">
                     <PlayIcon className="w-5 h-5"/>
                     <span>התחל סשן</span>
                 </button>
@@ -946,7 +946,7 @@ const PersonalItemDetailModal: React.FC<PersonalItemDetailModalProps> = ({ item,
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-2xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/20"
+                    className="w-full flex items-center justify-center bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/20 hover:shadow-[0_0_20px_var(--dynamic-accent-glow)]"
                 >
                     <LinkIcon className="h-5 w-5 ml-2" />
                     פתח קישור מקורי

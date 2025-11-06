@@ -119,7 +119,6 @@ const InvestmentsScreen: React.FC<InvestmentsScreenProps> = ({ setActiveScreen }
     const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number} | null>(null);
     const headerRef = useRef<HTMLElement>(null);
 
-    // Fi Principle: Parallax Header for Immersive Depth
     useEffect(() => {
         const handleScroll = () => {
             if (headerRef.current) {
@@ -135,13 +134,15 @@ const InvestmentsScreen: React.FC<InvestmentsScreenProps> = ({ setActiveScreen }
     }, []);
 
     const showStatus = (type: StatusMessageType, text: string) => {
+        if (type === 'error' && window.navigator.vibrate) {
+            window.navigator.vibrate(100);
+        }
         setStatusMessage({ type, text, id: Date.now() });
     };
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // FIX: Added `await` to the `dataService.getWatchlist()` call. Since `getWatchlist` is an asynchronous function returning a Promise, `await` is necessary to ensure the watchlist data is fully retrieved before proceeding to fetch financial data.
             const currentWatchlist = await dataService.getWatchlist();
             const data = await financialsService.fetchWatchlistData(currentWatchlist);
             setWatchlist(data);
@@ -200,7 +201,7 @@ const InvestmentsScreen: React.FC<InvestmentsScreenProps> = ({ setActiveScreen }
                     placeholder="הוסף סימול (למשל: TSLA, BTC)"
                     className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-white rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50"
                 />
-                <button type="submit" disabled={isAdding} className="bg-[var(--accent-gradient)] text-white font-bold p-3 rounded-xl disabled:opacity-50 transition-transform transform active:scale-97 hover:brightness-110 shadow-lg shadow-[var(--dynamic-accent-start)]/30">
+                <button type="submit" disabled={isAdding} className="bg-[var(--accent-gradient)] text-white font-bold p-3 rounded-xl disabled:opacity-50 transition-transform transform active:scale-97 hover:brightness-110 shadow-lg shadow-[var(--dynamic-accent-start)]/30 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]">
                     {isAdding ? <SparklesIcon className="w-6 h-6 animate-pulse"/> : <AddIcon className="w-6 h-6"/>}
                 </button>
             </form>

@@ -1,6 +1,6 @@
-import React, { useMemo, useState, useEffect, useContext } from 'react';
+import React, { useMemo, useState, useEffect, useContext, useRef, useCallback } from 'react';
 import type { PersonalItem } from '../types';
-import { DumbbellIcon, SummarizeIcon, ClipboardListIcon, TrashIcon, LinkIcon, FileIcon, BookOpenIcon, TargetIcon, StarIcon, LightbulbIcon, UserIcon, RoadmapIcon } from './icons';
+import { DumbbellIcon, SummarizeIcon, ClipboardListIcon, TrashIcon, LinkIcon, FileIcon, BookOpenIcon, TargetIcon, StarIcon, LightbulbIcon, UserIcon, RoadmapIcon, CheckCircleIcon } from './icons';
 import { PERSONAL_ITEM_TYPE_COLORS } from '../constants';
 import { AppContext } from '../state/AppContext';
 import { getIconForName } from './IconMap';
@@ -14,13 +14,44 @@ interface PersonalItemCardProps {
   spaceColor?: string;
   onDragStart?: (event: React.DragEvent, item: PersonalItem) => void;
   isDragging?: boolean;
+  onLongPress: (item: PersonalItem) => void;
+  isInSelectionMode: boolean;
+  isSelected: boolean;
 }
 
-const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onUpdate, onContextMenu, index, spaceColor, onDragStart, isDragging }) => {
+const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onUpdate, onContextMenu, index, spaceColor, onDragStart, isDragging, onLongPress, isInSelectionMode, isSelected }) => {
   const { state } = useContext(AppContext);
+  // FIX: Changed ref type to `any` to handle potential cross-environment (browser/Node) inconsistencies with setTimeout's return type.
+  const longPressTimerRef = useRef<any>();
+  const wasLongPressedRef = useRef(false);
   
   const typeColor = PERSONAL_ITEM_TYPE_COLORS[item.type];
   const accentColor = spaceColor || typeColor;
+  
+  const handlePointerDown = useCallback(() => {
+    wasLongPressedRef.current = false;
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (!isInSelectionMode) { // Only trigger long press if not already in selection mode
+          onLongPress(item);
+          wasLongPressedRef.current = true;
+      }
+    }, 500);
+  }, [item, onLongPress, isInSelectionMode]);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+  }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (wasLongPressedRef.current) {
+        e.preventDefault();
+        return;
+    }
+    onSelect(item, e);
+  }, [onSelect, item]);
+
 
   const getIcon = () => {
     const iconClass = "h-5 w-5";
@@ -61,20 +92,39 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onU
 
   return (
     <div 
-        className={`group themed-card p-4 shadow-md relative transition-all duration-300 ease-out border-l-4 ${cursorClass} ${isDragging ? 'dragging-item' : ''} animate-item-enter-fi`}
+        className={`group themed-card p-4 relative transition-all duration-300 ease-out border-l-4 ${cursorClass} ${isDragging ? 'dragging-item' : ''} ${isSelected ? 'selected' : ''}`}
         style={{ animationDelay: `${index * 30}ms`, borderLeftColor: accentColor }}
-        onClick={(e) => onSelect(item, e)}
-        onContextMenu={(e) => onContextMenu(e, item)}
+        onClick={handleClick}
+        onContextMenu={(e) => {
+            e.preventDefault();
+            if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+            if (isInSelectionMode) {
+                onSelect(item, e);
+            } else {
+                onContextMenu(e, item);
+            }
+        }}
+        onMouseDown={handlePointerDown}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchEnd={handlePointerUp}
         draggable={!!onDragStart}
         onDragStart={(e) => onDragStart && onDragStart(e, item)}
     >
-        <div className="flex justify-between items-start gap-4">
+        {isInSelectionMode && (
+          <div className={`absolute top-4 left-4 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-[var(--dynamic-accent-start)] border-[var(--dynamic-accent-start)]' : 'border-gray-500 bg-black/20'}`}>
+              {isSelected && <CheckCircleIcon className="w-7 h-7 text-white" />}
+          </div>
+       )}
+
+        <div className={`flex justify-between items-start gap-4 transition-opacity ${isInSelectionMode ? 'opacity-80' : ''}`}>
             <div className="flex-1 overflow-hidden">
                 <div className="flex items-center gap-2 mb-2">
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: `${accentColor}20`, color: accentColor }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${accentColor}20`, color: accentColor }}>
                         {getIcon()}
                     </div>
-                    <span className="text-sm font-semibold capitalize" style={{ color: typeColor }}>{item.type}</span>
+                    <span className="text-sm font-semibold capitalize" style={{ color: accentColor }}>{item.type}</span>
                 </div>
                 <h3 className="font-semibold text-gray-100 truncate">{item.title}</h3>
                 {previewContent && <p className="text-sm text-gray-400 mt-1 line-clamp-2">{previewContent}</p>}

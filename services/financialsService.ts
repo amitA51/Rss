@@ -1,7 +1,7 @@
 import type { WatchlistItem, FinancialAsset } from '../types';
 
 // New API Key for Finnhub (for news and stock charts)
-const FINNHUB_API_KEY = 'cne87gpr01qgjtj5u3qgcne87gpr01qgjtj5u3r0'; // Public sandbox key
+const FINNHUB_API_KEY = 'c1p3122ad3ifd2rggrj0'; // Public sandbox key
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 // API Key for Massive.com (for stock prices)

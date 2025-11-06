@@ -31,22 +31,24 @@ const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onDismiss,
   const isSuccess = type === 'success';
   const isError = type === 'error';
 
-  const bgColor = isSuccess ? 'bg-green-500/20' : isError ? 'bg-red-500/20' : 'bg-blue-500/20';
-  const textColor = isSuccess ? 'text-green-300' : isError ? 'text-red-300' : 'text-blue-300';
-  const borderColor = isSuccess ? 'border-green-500/30' : isError ? 'border-red-500/30' : 'border-blue-500/30';
+  const textColor = isSuccess ? 'text-[var(--success)]' : isError ? 'text-[var(--danger)]' : 'text-blue-300';
 
   return (
     <div 
-        className={`flex items-center gap-4 p-3 rounded-xl text-sm font-semibold animate-slide-up-in fixed bottom-24 right-4 left-4 sm:left-auto max-w-md mx-auto sm:mx-0 z-50 border ${bgColor} ${textColor} ${borderColor} backdrop-blur-sm shadow-lg`}
+        className={`fixed bottom-24 right-1/2 translate-x-1/2 z-50 animate-slide-up-in`}
         role="alert"
     >
-      {isSuccess ? <CheckCheckIcon className="w-5 h-5"/> : <WarningIcon className="w-5 h-5"/>}
-      <span className="flex-grow">{message}</span>
-      {onUndo && (
-        <button onClick={handleUndo} className="font-bold text-white hover:underline whitespace-nowrap">
-            בטל
-        </button>
-      )}
+      <div className="glass-modal-bg flex items-center gap-3 py-3 px-5 rounded-full text-sm font-semibold shadow-2xl">
+          <div className={textColor}>
+            {isSuccess ? <CheckCheckIcon className="w-5 h-5"/> : <WarningIcon className="w-5 h-5"/>}
+          </div>
+          <span className="flex-grow text-white">{message}</span>
+          {onUndo && (
+            <button onClick={handleUndo} className="font-bold text-[var(--dynamic-accent-highlight)] hover:underline whitespace-nowrap ml-4 pl-4 border-l border-white/20">
+                בטל
+            </button>
+          )}
+      </div>
     </div>
   );
 };

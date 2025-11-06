@@ -171,7 +171,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
             <button
                 onClick={() => onSummarize(item)}
                 disabled={isSummarizing || !!item.summary_ai}
-                className="w-full flex items-center justify-center bg-[var(--accent-gradient)] hover:brightness-110 disabled:bg-gray-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-2xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/30"
+                className="w-full flex items-center justify-center bg-[var(--accent-gradient)] hover:brightness-110 disabled:bg-gray-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-[var(--dynamic-accent-start)]/30"
             >
                 <SummarizeIcon className="h-5 w-5 ml-2" />
                 {isSummarizing ? 'מסכם...' : item.summary_ai ? 'סוכם' : 'סכם עם AI'}
@@ -181,7 +181,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
                     href={item.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center bg-[var(--bg-card)] hover:bg-white/5 text-white font-bold py-3 px-4 rounded-2xl transition-all transform active:scale-95 border border-[var(--border-primary)]"
+                    className="w-full flex items-center justify-center bg-[var(--bg-card)] hover:bg-white/5 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 border border-[var(--border-primary)]"
                 >
                     <LinkIcon className="h-5 w-5 ml-2" />
                     פתח מאמר מקורי

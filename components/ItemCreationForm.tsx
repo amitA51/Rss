@@ -122,7 +122,7 @@ const formReducer = (state: State, action: Action): State => {
 
 
 // --- Sub-components for form fields ---
-const inputStyles = "w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-2xl p-3 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50 focus:border-[var(--dynamic-accent-start)] transition-shadow";
+const inputStyles = "w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[var(--dynamic-accent-start)]/50 focus:border-[var(--dynamic-accent-start)] transition-shadow";
 const smallInputStyles = "w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[var(--dynamic-accent-start)] focus:border-[var(--dynamic-accent-start)]";
 
 const IconPicker: React.FC<{ selected: string; onSelect: (icon: string) => void }> = ({ selected, onSelect }) => (
@@ -284,7 +284,7 @@ const SimpleFormFields: React.FC<{title: string; setTitle: (v: string) => void; 
         </div>
         <div>
             <label htmlFor="content" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">תוכן</label>
-            <div className="border border-[var(--border-primary)] rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-[var(--dynamic-accent-start)]/50 focus-within:border-[var(--dynamic-accent-start)]">
+            <div className="border border-[var(--border-primary)] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[var(--dynamic-accent-start)]/50 focus-within:border-[var(--dynamic-accent-start)]">
                 <MarkdownToolbar onInsert={handleInsert} />
                 <textarea dir="auto" ref={contentRef} id="content" value={content} onChange={(e) => setContent(e.target.value)} rows={5} className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-3 focus:outline-none" placeholder={contentPlaceholder} required={contentRequired} />
             </div>
@@ -410,7 +410,6 @@ const WorkoutFormFields: React.FC<{state: State, dispatch: React.Dispatch<Action
                                 </div>
                             ))}
                         </div>
-                        {/* FIX: Corrected shorthand property to use the correct variable `exIndex` from the map function. */}
                         <button type="button" onClick={() => dispatch({ type: 'ADD_SET', payload: { exerciseIndex: exIndex } })} className="w-full text-sm text-[var(--accent-highlight)] font-semibold flex items-center justify-center gap-1"><AddIcon className="w-4 h-4"/> הוסף סט</button>
                     </div>
                 ))}
@@ -574,7 +573,8 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
                     author: state.author || undefined,
                     totalPages: state.totalPages ? parseInt(state.totalPages, 10) : undefined,
                     exercises: state.exercises.filter(e => e.name),
-                    steps: state.steps,
+                    // FIX: Map over steps to add the required 'isCompleted' property before submission.
+                    steps: state.steps.map(s => ({ ...s, isCompleted: false })),
                     attachments: state.attachments,
                     icon: state.icon || undefined,
                     projectId: state.projectId || undefined,
@@ -591,6 +591,7 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
 
         } catch (error: any) {
             console.error('Submission failed:', error);
+            if (window.navigator.vibrate) window.navigator.vibrate(100);
             setStatusMessage({type: 'error', text: error.message || 'שגיאה בשמירת הפריט', id: Date.now()});
             localDispatch({type: 'SUBMIT_DONE'});
         }
@@ -615,11 +616,14 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
     };
     
     const isPersonalItem = itemType !== 'spark' && itemType !== 'ticker';
+    const modalBgClass = appState.settings.themeSettings.cardStyle === 'glass' ? 'glass-modal-bg' : 'bg-[var(--bg-secondary)]';
+    const headerFooterBgClass = appState.settings.themeSettings.cardStyle === 'glass' ? 'bg-transparent' : 'bg-[var(--bg-secondary)]/80';
+
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-40" onClick={onClose}>
-            <div className={`bg-[var(--bg-primary)] w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] animate-modal-expand-in`} onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-sm z-10">
+            <div className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] animate-modal-expand-in`} onClick={e => e.stopPropagation()}>
+                <header className={`p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 ${headerFooterBgClass} backdrop-blur-sm z-10`}>
                     <h2 className="text-xl font-bold text-white">הוספה חדשה</h2>
                     <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95">
                         <CloseIcon className="h-6 w-6" />
@@ -655,8 +659,8 @@ export const ItemCreationForm: React.FC<ItemCreationFormProps> = ({ itemType, on
                         <AttachmentManager attachments={state.attachments} onAttachmentsChange={(atts) => localDispatch({type: 'SET_FIELD', payload: {field: 'attachments', value: atts}})} />
                     )}
                 </form>
-                 <footer className="p-4 border-t border-[var(--border-primary)] sticky bottom-0 bg-[var(--bg-primary)]/80 backdrop-blur-sm">
-                     <button type="submit" onClick={handleSubmit} disabled={state.submissionStatus === 'submitting'} className="w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-2xl transition-all transform active:scale-95 disabled:opacity-50">
+                 <footer className={`p-4 border-t border-[var(--border-primary)] sticky bottom-0 ${headerFooterBgClass} backdrop-blur-sm`}>
+                     <button type="submit" onClick={handleSubmit} disabled={state.submissionStatus === 'submitting'} className="w-full bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]">
                         {state.submissionStatus === 'submitting' ? 'שומר...' : 'שמור פריט'}
                     </button>
                 </footer>

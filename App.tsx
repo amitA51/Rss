@@ -15,34 +15,20 @@ import StatusMessage, { StatusMessageType } from './components/StatusMessage';
 // --- Polished Loading Component ---
 const AppLoading: React.FC = () => (
     <div className="h-[80vh] flex items-center justify-center">
-        <div className="relative w-16 h-16">
-            <svg className="w-full h-full" viewBox="0 0 100 100" style={{ filter: 'drop-shadow(0 0 8px var(--dynamic-accent-start))' }}>
-                <defs>
-                    <linearGradient id="spinner-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="var(--dynamic-accent-start)" />
-                        <stop offset="100%" stopColor="var(--dynamic-accent-end)" />
-                    </linearGradient>
-                </defs>
-                <circle
-                    className="text-transparent"
-                    stroke="url(#spinner-gradient)"
-                    strokeWidth="5"
-                    cx="50"
-                    cy="50"
-                    r="45"
-                    strokeDasharray="283"
-                    strokeDashoffset="283"
-                    style={{ animation: 'spinner-draw 2s cubic-bezier(0.5, 0, 0.5, 1) infinite' }}
-                />
-            </svg>
-            <style>{`
-                @keyframes spinner-draw {
-                    0% { stroke-dashoffset: 283; transform: rotate(0deg); }
-                    50% { stroke-dashoffset: 75; transform: rotate(45deg); }
-                    100% { stroke-dashoffset: 283; transform: rotate(360deg); }
-                }
-            `}</style>
-        </div>
+        <svg width="64" height="64" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="spinner-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="var(--dynamic-accent-start)" />
+                    <stop offset="100%" stopColor="var(--dynamic-accent-end)" />
+                </linearGradient>
+            </defs>
+            <g>
+                <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25" fill="currentColor"/>
+                <path d="M10.72,19.9a8,8,0,0,1-6.5-9.79A7.77,7.77,0,0,1,10.4,4.16a8,8,0,0,1,9.49,6.52A1.54,1.54,0,0,0,21.38,12h.13a1.37,1.37,0,0,0,1.38-1.54,11,11,0,1,0-12.7,12.39A1.54,1.54,0,0,0,12,21.34h0A1.47,1.47,0,0,0,10.72,19.9Z" fill="url(#spinner-gradient)">
+                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite"/>
+                </path>
+            </g>
+        </svg>
     </div>
 );
 
@@ -80,7 +66,7 @@ const ThemedApp: React.FC = () => {
         }
 
         // Apply font class
-        body.classList.remove('font-inter', 'font-lato', 'font-source-code-pro');
+        body.classList.remove('font-inter', 'font-lato', 'font-source-code-pro', 'font-heebo', 'font-rubik', 'font-alef');
         body.classList.add(`font-${themeSettings.font.replace(/_/g, '-')}`);
 
         // Apply card style class
@@ -219,12 +205,14 @@ const ThemedApp: React.FC = () => {
             </main>
             <BottomNavBar activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
             {updateAvailable && (
-                <div className="fixed bottom-24 right-4 z-50 p-3 flex items-center gap-4 animate-screen-enter themed-card">
-                    <p className="text-sm text-white font-medium">עדכון חדש זמין!</p>
-                    <button onClick={handleUpdate} className="flex items-center gap-2 bg-[var(--accent-gradient)] text-white text-sm font-semibold px-3 py-1.5 rounded-md hover:brightness-110 transition-all hover:shadow-[0_0_12px_var(--dynamic-accent-glow)]">
-                        <RefreshIcon className="w-4 h-4" />
-                        רענן
-                    </button>
+                <div className="fixed bottom-24 right-4 z-50 animate-screen-enter">
+                    <div className="themed-card p-3 flex items-center gap-4">
+                        <p className="text-sm text-white font-medium">עדכון חדש זמין!</p>
+                        <button onClick={handleUpdate} className="flex items-center gap-2 bg-[var(--accent-gradient)] text-black text-sm font-bold px-4 py-2 rounded-full hover:brightness-110 transition-all shadow-[0_4px_15px_var(--dynamic-accent-glow)]">
+                            <RefreshIcon className="w-4 h-4" />
+                            רענן
+                        </button>
+                    </div>
                 </div>
             )}
             {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}

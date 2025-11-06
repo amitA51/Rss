@@ -21,7 +21,8 @@ const QuickAddTask: React.FC<QuickAddTaskProps> = ({ onTaskAdded }) => {
         try {
             const parsedData = await parseNaturalLanguageTask(title.trim());
 
-            const newItem = addPersonalItem({
+            // FIX: Await the async data service call to get the created item.
+            const newItem = await addPersonalItem({
                 type: 'task',
                 title: parsedData.title,
                 dueDate: parsedData.dueDate || undefined,
@@ -35,7 +36,8 @@ const QuickAddTask: React.FC<QuickAddTaskProps> = ({ onTaskAdded }) => {
         } catch (error) {
             console.error("Failed to add smart task, falling back.", error);
             // Fallback to simple add
-            const newItem = addPersonalItem({
+            // FIX: Await the async data service call to get the created item.
+            const newItem = await addPersonalItem({
                 type: 'task',
                 title: title.trim(),
                 content: '',
@@ -51,7 +53,7 @@ const QuickAddTask: React.FC<QuickAddTaskProps> = ({ onTaskAdded }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-[var(--bg-card)] p-2 rounded-2xl border border-[var(--border-primary)] shadow-lg">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-[var(--bg-card)] p-2 rounded-xl border border-[var(--border-primary)] shadow-lg">
             <input
                 type="text"
                 value={title}

@@ -13,10 +13,10 @@ interface NavItemProps {
 }
 
 const NavItem: React.FC<NavItemProps> = ({ label, icon, isActive, onClick, onContextMenu, isCenter }) => {
-  const iconClasses = `h-6 w-6 transition-all duration-300 ${
-    isActive && !isCenter ? 'text-[var(--dynamic-accent-start)]' : 
-    isCenter ? 'text-white' : 
-    'text-[var(--text-secondary)] group-hover:text-white'
+  const iconClasses = `transition-all duration-300 ease-[var(--fi-cubic-bezier)] ${
+    isCenter
+      ? 'h-9 w-9 text-[var(--dynamic-accent-start)] group-hover:brightness-125'
+      : `h-6 w-6 ${isActive ? 'text-[var(--dynamic-accent-start)] svg-glow' : 'text-[var(--text-secondary)] group-hover:text-white'}`
   }`;
 
   const finalIcon = React.isValidElement<{ className?: string }>(icon)
@@ -27,25 +27,20 @@ const NavItem: React.FC<NavItemProps> = ({ label, icon, isActive, onClick, onCon
     <button
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className={`relative flex flex-col items-center justify-center h-16 transition-all duration-300 group ${isCenter ? 'w-20' : 'w-16'}`}
+      className={`relative flex flex-col items-center justify-center h-16 transition-all duration-300 group ${isCenter ? 'w-20' : 'flex-1'}`}
       aria-label={label}
     >
-      <div 
-        className={`absolute transition-all duration-300 ${
-          isCenter 
-            ? `w-16 h-16 rounded-full bottom-6 shadow-lg shadow-black/30 border-2 border-[var(--bg-primary)] ${isActive ? 'bg-[var(--accent-gradient)] shadow-[0_0_15px_var(--dynamic-accent-glow)]' : 'bg-[var(--bg-card)]'}`
-            : ''
-        }`}
-      ></div>
-      <div className={`relative transition-transform duration-300 transform-gpu group-active:scale-90 ${isCenter ? 'mt-3' : ''} ${isActive && !isCenter ? 'scale-110 -translate-y-2' : 'group-hover:-translate-y-1'}`}>
+      <div className={`relative flex flex-col items-center justify-center transition-transform duration-300 transform-gpu group-active:scale-90 ${isActive && !isCenter ? 'scale-110 -translate-y-1' : 'group-hover:-translate-y-1'}`}>
         {finalIcon}
+        <span 
+          className={`text-xs mt-1 font-bold transition-all duration-300 ease-[var(--fi-cubic-bezier)] 
+          ${isActive && !isCenter ? 'themed-glow-text text-[var(--dynamic-accent-highlight)] opacity-100' : 
+          isCenter ? 'opacity-0' :
+          'text-[var(--text-secondary)] opacity-80 group-hover:opacity-100'}`}
+        >
+          {label}
+        </span>
       </div>
-      <span 
-        className={`text-xs mt-1 font-bold transition-all duration-300 
-        ${isActive && !isCenter ? 'text-[var(--dynamic-accent-highlight)] opacity-100 themed-glow-text' : 'text-[var(--text-secondary)] opacity-60 group-hover:text-white group-hover:opacity-100'}`}
-      >
-        {label}
-      </span>
     </button>
   );
 };
@@ -53,7 +48,7 @@ const NavItem: React.FC<NavItemProps> = ({ label, icon, isActive, onClick, onCon
 const allNavItems: Record<Screen, { label: string; icon: React.ReactNode }> = {
     feed: { label: 'פיד', icon: <FeedIcon /> },
     today: { label: 'היום', icon: <TargetIcon /> },
-    add: { label: 'הוספה', icon: <AddIcon className="h-7 w-7" /> },
+    add: { label: 'הוספה', icon: <AddIcon /> },
     library: { label: 'המתכנן', icon: <LayoutDashboardIcon /> },
     investments: { label: 'השקעות', icon: <ChartBarIcon /> },
     search: { label: 'חיפוש', icon: <SearchIcon /> },
@@ -66,8 +61,6 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
   const { settings } = state;
   const { screenLabels, navBarLayout } = settings;
 
-  // FIX: Encapsulate event handlers in useCallback to stabilize their identity
-  // and prevent unnecessary re-renders, and include them in the useMemo dependency array.
   const handleLongPressAdd = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const lastType = settings.lastAddedType;
@@ -99,8 +92,6 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
 
     return layout.slice(0, 5).map((screenId, index) => {
       const item = allNavItems[screenId];
-      // FIX: Corrected a runtime error where `item.id` was accessed. The `item` object from `allNavItems`
-      // does not have an `id` property. The check should be against `screenId`.
       const isCenterButton = index === 2 && screenId === 'add';
 
       return {
@@ -114,13 +105,10 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
     });
   }, [navBarLayout, screenLabels, setActiveScreen, handleAddItemClick, handleLongPressAdd]);
 
-  const navClasses = `fixed bottom-0 right-0 left-0 h-20 bg-transparent z-30 ${settings.themeSettings.cardStyle === 'glass' ? 'glass-nav' : 'bg-[var(--bg-primary)]/80 backdrop-blur-lg border-t border-[var(--border-primary)]'}`;
 
   return (
-    <>
-      <nav 
-        className={navClasses}
-      >
+      <nav className="fixed bottom-0 right-0 left-0 h-20 z-30">
+        <div className="absolute inset-0 glass-nav border-t border-[var(--border-primary)]"></div>
         <div className="flex justify-around max-w-md mx-auto relative h-full items-center">
           {navItems.map((item) => (
               <NavItem
@@ -135,7 +123,6 @@ const BottomNavBar: React.FC<{ activeScreen: Screen; setActiveScreen: (screen: S
           ))}
         </div>
       </nav>
-    </>
   );
 };
 

@@ -20,7 +20,7 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
 
     const sessionPlan = useMemo(() => {
         if (isPomodoro) {
-            return [{ type: 'work' as IntervalType, duration: POMODORO_DURATION, label: 'Focus' }];
+            return [{ type: 'work' as IntervalType, duration: POMODORO_DURATION, label: 'פוקוס' }];
         }
         
         // Workout plan logic
@@ -28,13 +28,13 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
         if (item.exercises && item.exercises.length > 0) {
             item.exercises.forEach((ex, exIndex) => {
                 for (let i = 0; i < ex.sets.length; i++) {
-                    plan.push({ type: 'work', duration: 0, label: `${ex.name} - Set ${i + 1}` });
+                    plan.push({ type: 'work', duration: 0, label: `${ex.name} - סט ${i + 1}` });
                     if (i < ex.sets.length - 1) {
-                        plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration, label: 'Rest' });
+                        plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration, label: 'מנוחה' });
                     }
                 }
                 if (exIndex < item.exercises!.length - 1) {
-                    plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration * 2, label: 'Rest Between Exercises' });
+                    plan.push({ type: 'rest', duration: intervalTimerSettings.restDuration * 2, label: 'מנוחה בין תרגילים' });
                 }
             });
         }
@@ -129,49 +129,55 @@ const SessionTimer: React.FC<SessionTimerProps> = ({ item, onEndSession }) => {
     return (
         <div className="fixed inset-0 bg-[var(--bg-primary)] z-50 flex flex-col items-center justify-between p-8 text-white animate-screen-enter">
             <div className="text-center">
-                <h1 className="text-3xl font-bold">{item.title}</h1>
-                <p className="text-lg text-[var(--text-secondary)] mt-1">{isFinished ? "Session Complete!" : currentInterval.label}</p>
+                <h1 className="text-4xl font-bold">{item.title}</h1>
+                <p className="text-xl text-[var(--text-secondary)] mt-2">{isFinished ? "הסשן הושלם!" : currentInterval.label}</p>
             </div>
             
-            <div className="relative w-72 h-72 flex items-center justify-center">
+            <div className="relative w-80 h-80 flex items-center justify-center" style={{ filter: `drop-shadow(0 0 20px var(--dynamic-accent-glow))`}}>
                 <svg className="w-full h-full" viewBox="0 0 250 250">
-                    <circle className="text-white/5" stroke="currentColor" strokeWidth="10" fill="transparent" r="120" cx="125" cy="125" />
+                    <circle className="text-white/10" stroke="currentColor" strokeWidth="8" fill="transparent" r="120" cx="125" cy="125" />
                     <circle 
-                        className="text-[var(--dynamic-accent-start)]"
-                        stroke="currentColor" strokeWidth="10" fill="transparent" r="120" cx="125" cy="125" 
+                        stroke="url(#progress-gradient)"
+                        strokeWidth="8" fill="transparent" r="120" cx="125" cy="125" 
                         strokeLinecap="round"
                         transform="rotate(-90 125 125)"
                         style={{ strokeDasharray: circumference, strokeDashoffset, transition: 'stroke-dashoffset 1s linear' }}
                     />
+                    <defs>
+                        <linearGradient id="progress-gradient">
+                            <stop offset="0%" stopColor="var(--dynamic-accent-start)"/>
+                            <stop offset="100%" stopColor="var(--dynamic-accent-end)"/>
+                        </linearGradient>
+                    </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                     {currentInterval.duration > 0 && !isFinished && (
-                        <span className="font-mono font-bold text-7xl tracking-tighter">{minutes}:{seconds}</span>
+                        <span className="font-mono font-bold text-8xl tracking-tighter">{minutes}:{seconds}</span>
                     )}
-                     {isFinished && !isPomodoro && <span className="text-5xl font-bold">Great!</span>}
-                     {currentInterval.duration === 0 && !isFinished && <span className="text-4xl font-bold">Ready?</span>}
+                     {isFinished && !isPomodoro && <span className="text-6xl font-bold">מעולה!</span>}
+                     {currentInterval.duration === 0 && !isFinished && <span className="text-5xl font-bold">מוכן?</span>}
                 </div>
             </div>
 
             {isFinished && !isPomodoro ? (
-                 <button onClick={handleFinishWorkout} className="bg-[var(--accent-gradient)] text-white font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95">
-                    Finish & Return
+                 <button onClick={handleFinishWorkout} className="bg-[var(--accent-gradient)] text-black font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95 shadow-[0_4px_20px_var(--dynamic-accent-glow)]">
+                    סיים וחזור
                 </button>
             ) : isPomodoro ? (
                  <div className="h-24 flex items-center">
                     <button onClick={handleCancelSession} className="bg-white/10 text-white font-bold py-4 px-12 rounded-full text-xl transition-transform transform active:scale-95">
-                        Stop Session
+                        הפסק סשן
                     </button>
                  </div>
             ) : (
                 <div className="flex items-center justify-center gap-6">
-                     <button onClick={handleCancelSession} className="bg-white/10 text-white p-4 rounded-full transition-transform transform active:scale-95">
+                     <button onClick={handleCancelSession} className="bg-white/10 text-white p-5 rounded-full transition-transform transform active:scale-95">
                         <StopIcon className="w-8 h-8"/>
                     </button>
-                    <button onClick={handlePlayPause} className="bg-[var(--accent-gradient)] text-white p-6 rounded-full transition-transform transform active:scale-95">
+                    <button onClick={handlePlayPause} className="bg-[var(--accent-gradient)] text-black p-7 rounded-full transition-transform transform active:scale-95 shadow-[0_4px_20px_var(--dynamic-accent-glow)]">
                        {isRunning ? <PauseIcon className="w-10 h-10"/> : <PlayIcon className="w-10 h-10"/>}
                     </button>
-                    <button onClick={() => advanceToNextInterval(false)} className="bg-white/10 text-white p-4 rounded-full transition-transform transform active:scale-95">
+                    <button onClick={() => advanceToNextInterval(false)} className="bg-white/10 text-white p-5 rounded-full transition-transform transform active:scale-95">
                         <SkipNextIcon className="w-8 h-8"/>
                     </button>
                 </div>

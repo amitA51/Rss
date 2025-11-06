@@ -69,6 +69,9 @@ const ThemePreviewCard: React.FC<{
     const getFontFamily = (font: AppFont) => {
         if (font === 'lato') return "'Lato', sans-serif";
         if (font === 'source-code-pro') return "'Source Code Pro', monospace";
+        if (font === 'heebo') return "'Heebo', sans-serif";
+        if (font === 'rubik') return "'Rubik', sans-serif";
+        if (font === 'alef') return "'Alef', sans-serif";
         return "'Inter', sans-serif";
     }
 
@@ -469,7 +472,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ setActiveScreen }) => {
                     </div>
                      <div className="flex justify-between items-center">
                         <p className="text-[var(--text-primary)] font-medium">פונט</p>
-                        <SegmentedControl value={settings.themeSettings.font} onChange={v => handleThemeSettingChange('font', v as AppFont)} options={[{label: 'Inter', value: 'inter'}, {label: 'Lato', value: 'lato'}, {label: 'Code', value: 'source-code-pro'}]} />
+                        <SegmentedControl 
+                            value={settings.themeSettings.font} 
+                            onChange={v => handleThemeSettingChange('font', v as AppFont)} 
+                            options={[
+                                {label: 'Inter', value: 'inter'}, 
+                                {label: 'Heebo', value: 'heebo'},
+                                {label: 'Rubik', value: 'rubik'},
+                                {label: 'Alef', value: 'alef'},
+                                {label: 'Lato', value: 'lato'}, 
+                                {label: 'Code', value: 'source-code-pro'}
+                            ]} 
+                        />
                     </div>
                      <div className="flex justify-between items-center">
                         <p className="text-[var(--text-primary)] font-medium">סגנון כרטיסים</p>

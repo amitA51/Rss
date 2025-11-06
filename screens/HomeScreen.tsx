@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useContext, useMemo, useRef, useEffect } from 'react';
 import type { PersonalItem, HomeScreenComponent, Screen, HomeScreenComponentId } from '../types';
 import TaskItem from '../components/TaskItem';
 import HabitItem from '../components/HabitItem';
@@ -70,8 +70,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
     const [isBriefingLoading, setIsBriefingLoading] = useState(false);
     const [briefingContent, setBriefingContent] = useState('');
-    const [celebrateHabits, setCelebrateHabits] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
+    const headerRef = useRef<HTMLElement>(null);
 
     // State for SECTION dragging
     const dragItem = useRef<number | null>(null);
@@ -83,7 +83,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     const dragOverTask = useRef<PersonalItem | null>(null);
     const [draggingTask, setDraggingTask] = useState(false);
 
+    useEffect(() => {
+        const handleScroll = () => {
+            if (headerRef.current) {
+                const scrollY = window.scrollY;
+                const translateY = Math.min(scrollY * 0.5, 150);
+                headerRef.current.style.transform = `translateY(-${translateY}px)`;
+                headerRef.current.style.opacity = `${Math.max(1 - scrollY / 200, 0)}`;
+            }
+        };
+        
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
+        if (type === 'error' && window.navigator.vibrate) {
+            window.navigator.vibrate(100);
+        }
         setStatusMessage({ type, text, id: Date.now(), onUndo });
     };
 
@@ -125,20 +142,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
 
         try {
             await updatePersonalItem(id, updates);
-
-            // Habit celebration logic after successful update
-            const updatedItem = { ...originalItem, ...updates };
-            if (updatedItem.type === 'habit' && updates.lastCompleted) {
-                const allHabits = personalItems.filter(i => i.type === 'habit');
-                if (allHabits.length > 0 && allHabits.every(h => {
-                    const lastCompleted = (h.id === id) ? updates.lastCompleted : h.lastCompleted;
-                    if (!lastCompleted) return false;
-                    return new Date(lastCompleted).toDateString() === new Date().toDateString();
-                })) {
-                    setCelebrateHabits(true);
-                    setTimeout(() => setCelebrateHabits(false), 3000);
-                }
-            }
         } catch (error) {
             console.error("Failed to update item:", error);
             // Rollback on failure
@@ -160,7 +163,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
 
         showStatus('success', 'הפריט נמחק.', async () => {
-            // FIX: Added `await` to the async undo action to ensure it completes before potential subsequent actions.
             await reAddPersonalItem(itemToDelete);
             dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
         });
@@ -281,7 +283,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
 
     const componentsMap: Record<HomeScreenComponentId, React.ReactNode> = {
         gratitude: <GratitudeTracker />,
-        habits: todaysHabits.map((item, index) => <HabitItem key={item.id} index={index} item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} isCelebrationActive={celebrateHabits} onContextMenu={handleContextMenu} />),
+        habits: todaysHabits.map((item, index) => <HabitItem key={item.id} index={index} item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} onContextMenu={handleContextMenu} />),
         tasks: (
             <>
                 {openTasks.map((item, index) => (
@@ -317,7 +319,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
 
     return (
         <div className={`pt-4 pb-8 space-y-8 transition-all duration-300 ${focusMode ? 'focus-mode' : ''}`}>
-            <header className="sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 -mx-4 px-4">
+            <header ref={headerRef} className="sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 -mx-4 px-4 transition-transform,opacity duration-300">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <DailyProgressCircle percentage={completionPercentage} />

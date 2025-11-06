@@ -10,16 +10,10 @@ interface HabitItemProps {
   onSelect: (item: PersonalItem, event: React.MouseEvent) => void;
   onContextMenu: (event: React.MouseEvent, item: PersonalItem) => void;
   index: number;
-  isCelebrationActive?: boolean;
 }
 
-const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelect, onContextMenu, index, isCelebrationActive }) => {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setIsMounted(true), 10);
-    return () => clearTimeout(timer);
-  }, []);
+const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelect, onContextMenu, index }) => {
+  const [justCompleted, setJustCompleted] = useState(false);
 
   const isCompletedToday = () => {
     if (!item.lastCompleted) return false;
@@ -36,6 +30,8 @@ const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelec
     if (window.navigator.vibrate) {
         window.navigator.vibrate(50);
     }
+    setJustCompleted(true);
+    setTimeout(() => setJustCompleted(false), 800);
     
     const today = new Date();
     const todayISO = today.toISOString();
@@ -76,20 +72,21 @@ const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelec
     <div 
         onClick={(e) => onSelect(item, e)}
         onContextMenu={(e) => onContextMenu(e, item)}
-        className={`group relative themed-card p-4 flex items-center justify-between gap-4 transition-all duration-300 ease-out ${completed ? 'bg-[var(--dynamic-accent-start)]/20 border-[var(--dynamic-accent-start)]/50 completed-habit' : ''} cursor-pointer active:scale-95 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 animate-item-enter'}`}
+        className={`group relative themed-card p-4 flex items-center justify-between gap-4 transition-all duration-300 ease-[var(--fi-cubic-bezier)] ${completed ? 'bg-[var(--dynamic-accent-start)]/20 border-[var(--dynamic-accent-start)]/50 completed-habit' : ''} cursor-pointer active:scale-97 animate-item-enter-fi`}
         style={{ animationDelay: `${index * 50}ms` }}
     >
-      {isCelebrationActive && completed && (
-          <>
-              <div className="celebrate-sparkle" style={{ top: '20%', left: '10%', animationDelay: '0s', width: '6px', height: '6px' }}></div>
-              <div className="celebrate-sparkle" style={{ top: '80%', left: '30%', animationDelay: '0.2s' }}></div>
-              <div className="celebrate-sparkle" style={{ top: '50%', left: '90%', animationDelay: '0.4s', width: '10px', height: '10px' }}></div>
-              <div className="celebrate-sparkle" style={{ top: '10%', left: '60%', animationDelay: '0.1s' }}></div>
-          </>
-      )}
+      {justCompleted && Array.from({ length: 7 }).map((_, i) => (
+        <div key={i} className="celebrate-sparkle" style={{
+            top: `${Math.random() * 80 + 10}%`,
+            left: `${Math.random() * 80 + 10}%`,
+            animationDelay: `${Math.random() * 0.2}s`,
+            width: `${Math.random() * 6 + 6}px`,
+            height: `${Math.random() * 6 + 6}px`,
+        }}></div>
+      ))}
       <div className="flex items-center gap-4">
           <div className="relative">
-              <FlameIcon className={`w-8 h-8 shrink-0 transition-all duration-500 ${item.streak && item.streak > 0 ? 'text-[var(--dynamic-accent-start)]' : 'text-gray-600'} ${completed ? 'svg-glow' : ''}`} />
+              <FlameIcon className={`w-10 h-10 shrink-0 transition-all duration-500 ${item.streak && item.streak > 0 ? 'text-[var(--dynamic-accent-start)] svg-glow' : 'text-gray-600'}`} />
               {item.streak && item.streak > 0 ? (
                   <span className="absolute -top-1 -right-2 text-xs font-bold bg-[var(--dynamic-accent-start)] text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-[var(--bg-card)]"
                     style={{boxShadow: '0 0 8px var(--dynamic-accent-glow)'}}
@@ -108,11 +105,11 @@ const HabitItem: React.FC<HabitItemProps> = ({ item, onUpdate, onDelete, onSelec
       <button
         onClick={(e) => { e.stopPropagation(); handleComplete(); }}
         disabled={completed}
-        className={`relative p-3 rounded-full transition-all transform hover:scale-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 ${completed ? 'bg-[var(--dynamic-accent-start)] text-white' : 'bg-[var(--bg-secondary)] hover:bg-white/10 text-[var(--text-primary)]'}`}
+        className={`relative w-14 h-14 flex items-center justify-center rounded-full transition-all transform hover:scale-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 ${completed ? 'bg-[var(--dynamic-accent-start)] text-white' : 'bg-[var(--bg-secondary)] hover:bg-white/10 text-[var(--text-primary)]'}`}
         aria-label={completed ? 'הושלם להיום' : 'סמן כהושלם'}
       >
         {completed && <div className="absolute inset-0 rounded-full bg-[var(--dynamic-accent-start)] animate-ping opacity-70"></div>}
-        <CheckCircleIcon className="w-7 h-7" />
+        <CheckCircleIcon className="w-8 h-8" />
       </button>
       <button
           onClick={handleDelete}

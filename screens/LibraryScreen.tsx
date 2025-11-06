@@ -6,19 +6,55 @@ import PersonalItemDetailModal from '../components/PersonalItemDetailModal';
 import PersonalItemContextMenu from '../components/PersonalItemContextMenu';
 import SpaceSummaryModal from '../components/SpaceSummaryModal';
 import { ItemCreationForm } from '../components/ItemCreationForm';
-import { SettingsIcon, LayoutDashboardIcon, SparklesIcon, DragHandleIcon, CalendarIcon, ListIcon, AddIcon } from '../components/icons';
+import { SettingsIcon, LayoutDashboardIcon, SparklesIcon, DragHandleIcon, CalendarIcon, ListIcon, AddIcon, SearchIcon, CloseIcon, TrashIcon, CopyIcon, StarIcon } from '../components/icons';
 import { getIconForName } from '../components/IconMap';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { AppContext } from '../state/AppContext';
 import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, reAddPersonalItem } from '../services/dataService';
 import { summarizeSpaceContent } from '../services/geminiService';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useDebounce } from '../hooks/useDebounce';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
 import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
 
 
 // --- Helper Components ---
+
+const BatchActionBar: React.FC<{
+  count: number;
+  onCancel: () => void;
+  onDelete: () => void;
+  onToggleImportant: () => void;
+  onDuplicate: () => void;
+}> = ({ count, onCancel, onDelete, onToggleImportant, onDuplicate }) => {
+  if (count === 0) return null;
+
+  return (
+    <div className="fixed bottom-20 right-0 left-0 z-40 p-2 animate-slide-up-in">
+      <div className="max-w-md mx-auto bg-[var(--bg-card)]/80 backdrop-blur-xl border border-[var(--border-primary)] rounded-2xl shadow-2xl p-2 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+            <button onClick={onCancel} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                <CloseIcon className="w-6 h-6 text-white"/>
+            </button>
+            <span className="font-bold text-white">{count} נבחרו</span>
+        </div>
+        <div className="flex items-center gap-2">
+            <button onClick={onToggleImportant} className="p-3 rounded-full hover:bg-white/10 transition-colors text-gray-300" title="סמן כחשוב">
+                <StarIcon className="w-6 h-6"/>
+            </button>
+            <button onClick={onDuplicate} className="p-3 rounded-full hover:bg-white/10 transition-colors text-gray-300" title="שכפל">
+                <CopyIcon className="w-6 h-6"/>
+            </button>
+            <button onClick={onDelete} className="p-3 rounded-full hover:bg-red-500/10 transition-colors text-red-400" title="מחק">
+                <TrashIcon className="w-6 h-6"/>
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const ViewSwitcher: React.FC<{
     currentView: 'list' | 'board' | 'calendar';
@@ -106,9 +142,18 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
     const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
     
+    // --- State for Batch Actions ---
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
     // --- State for "Quick Add" ---
     const [isAdding, setIsAdding] = useState(false);
     const [addConfig, setAddConfig] = useState<{type: AddableType; defaultStatus?: 'todo'|'doing'|'done'; defaultDueDate?: string} | null>(null);
+    
+    // --- New State for Search & Sort ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'type' | 'importance' | 'title'>('date-desc');
+    const debouncedQuery = useDebounce(searchQuery, 300);
 
     // --- Drag & Drop State for List View ---
     const dragItem = useRef<PersonalItem | null>(null);
@@ -121,11 +166,6 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         isOpen: false, space: null, content: null, isLoading: false
     });
     
-    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
-        setStatusMessage({ type, text, id: Date.now(), onUndo });
-    };
-
-    // Fi Principle: Parallax Header for Immersive Depth
     useEffect(() => {
         const handleScroll = () => {
             if (headerRef.current) {
@@ -140,16 +180,45 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => void) => {
+        if (type === 'error' && window.navigator.vibrate) {
+            window.navigator.vibrate(100);
+        }
+        setStatusMessage({ type, text, id: Date.now(), onUndo });
+    };
+
     const personalSpaces = useMemo(() => spaces.filter(s => s.type === 'personal'), [spaces]);
     
     const { itemsBySpace, kanbanItems, calendarItems, itemCountsBySpace } = useMemo(() => {
+        const sortedAndFilteredItems = personalItems
+            .filter(item => {
+                if (!debouncedQuery) return true;
+                const query = debouncedQuery.toLowerCase();
+                return item.title.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query);
+            })
+            .sort((a, b) => {
+                switch (sortBy) {
+                    case 'date-asc':
+                        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                    case 'type':
+                        return a.type.localeCompare(b.type) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                    case 'importance':
+                        return (b.isImportant ? 1 : 0) - (a.isImportant ? 1 : 0) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                    case 'title':
+                        return a.title.localeCompare(b.title, 'he');
+                    case 'date-desc':
+                    default:
+                        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                }
+            });
+
         const map = new Map<string, PersonalItem[]>();
         personalSpaces.forEach(space => map.set(space.id, []));
         const kItems: PersonalItem[] = [];
         const cItems: PersonalItem[] = [];
         const kanbanTypes: PersonalItemType[] = ['task', 'goal', 'roadmap', 'learning', 'idea'];
 
-        personalItems.forEach(item => {
+        sortedAndFilteredItems.forEach(item => {
             if (item.spaceId && map.has(item.spaceId)) {
                 map.get(item.spaceId)!.push(item);
             }
@@ -160,14 +229,10 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                 cItems.push(item);
             }
         });
-
-        map.forEach((items, spaceId) => {
-            map.set(spaceId, items.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        });
         
         const counts = new Map<string, { total: number; byType: Record<string, number> }>();
         personalSpaces.forEach(space => {
-            const itemsInSpace = map.get(space.id) || [];
+            const itemsInSpace = personalItems.filter(i => i.spaceId === space.id);
             const byType: Record<string, number> = {};
             itemsInSpace.forEach(item => {
                 byType[item.type] = (byType[item.type] || 0) + 1;
@@ -176,7 +241,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         });
         
         return { itemsBySpace: map, kanbanItems: kItems, calendarItems: cItems, itemCountsBySpace: counts };
-    }, [personalItems, personalSpaces]);
+    }, [personalItems, personalSpaces, debouncedQuery, sortBy]);
     
     const openAddItemModal = useCallback((config: {type: AddableType; defaultStatus?: 'todo'|'doing'|'done'; defaultDueDate?: string}) => {
         setAddConfig(config);
@@ -204,9 +269,29 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     };
     
     const handleSelectItem = useCallback((item: PersonalItem, event?: React.MouseEvent) => {
-        event?.stopPropagation();
-        setSelectedItem(item);
-    }, []);
+        if (selectionMode) {
+            event?.stopPropagation();
+            const newIds = new Set(selectedIds);
+            if (newIds.has(item.id)) {
+                newIds.delete(item.id);
+            } else {
+                newIds.add(item.id);
+            }
+            setSelectedIds(newIds);
+            if (newIds.size === 0) {
+                setSelectionMode(false);
+            }
+        } else {
+            event?.stopPropagation();
+            setSelectedItem(item);
+        }
+    }, [selectionMode, selectedIds]);
+
+    const handleLongPress = (item: PersonalItem) => {
+        if (window.navigator.vibrate) window.navigator.vibrate(50);
+        setSelectionMode(true);
+        setSelectedIds(new Set([item.id]));
+    };
     
     const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
         setSelectedItem(nextItem || null);
@@ -242,7 +327,6 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
     
         showStatus('success', 'הפריט נמחק.', async () => {
-            // FIX: Added await to the async undo action to ensure it completes before potential subsequent actions.
             await reAddPersonalItem(itemToDelete);
             dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
         });
@@ -303,11 +387,53 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         dragItem.current = null;
         dragOverItem.current = null;
     };
+    
+    // --- Batch Action Handlers ---
+    const handleBatchCancel = () => {
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+    };
+
+    const handleBatchToggleImportant = () => {
+        const itemsToUpdate = Array.from(selectedIds).map(id => personalItems.find(item => item.id === id)).filter(Boolean) as PersonalItem[];
+        const shouldMarkImportant = itemsToUpdate.some(item => !item.isImportant);
+        itemsToUpdate.forEach(item => handleUpdateItem(item.id, { isImportant: shouldMarkImportant }));
+        handleBatchCancel();
+    };
+    
+    const handleBatchDuplicate = () => {
+        const itemsToDuplicate = Array.from(selectedIds).map(id => personalItems.find(item => item.id === id)).filter(Boolean) as PersonalItem[];
+        itemsToDuplicate.forEach(item => handleDuplicateItem(item.id));
+        showStatus('success', `${itemsToDuplicate.length} פריטים שוכפלו.`);
+        handleBatchCancel();
+    };
+
+    const handleBatchDelete = async () => {
+        const itemsToDelete = Array.from(selectedIds).map(id => personalItems.find(item => item.id === id)).filter(Boolean) as PersonalItem[];
+        
+        if (window.navigator.vibrate) window.navigator.vibrate(100);
+
+        itemsToDelete.forEach(item => {
+             dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: item.id });
+        });
+        
+        try {
+            await Promise.all(itemsToDelete.map(item => removePersonalItem(item.id)));
+            showStatus('success', `${itemsToDelete.length} פריטים נמחקו.`);
+        } catch (error) {
+            console.error('Batch delete failed:', error);
+            showStatus('error', 'שגיאה במחיקת הפריטים.');
+        }
+
+        handleBatchCancel();
+    };
+
 
     const renderCurrentView = () => {
         switch(currentView) {
             case 'board':
-                return <KanbanView items={kanbanItems} onUpdate={handleUpdateItem} onSelectItem={handleSelectItem} onQuickAdd={type => openAddItemModal({ type })} />;
+                // FIX: Pass openAddItemModal directly to onQuickAdd. The signatures are compatible.
+                return <KanbanView items={kanbanItems} onUpdate={handleUpdateItem} onSelectItem={handleSelectItem} onQuickAdd={openAddItemModal} />;
             case 'calendar':
                 return <CalendarView items={calendarItems} onUpdate={handleUpdateItem} onSelectItem={handleSelectItem} onQuickAdd={(type, date) => openAddItemModal({ type, defaultDueDate: date })} />;
             case 'list':
@@ -348,10 +474,13 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                                                         onContextMenu={handleContextMenu} 
                                                         index={index}
                                                         spaceColor={space.color}
+                                                        onLongPress={handleLongPress}
+                                                        isInSelectionMode={selectionMode}
+                                                        isSelected={selectedIds.has(item.id)}
                                                     />
                                                 </div>
                                             ))}
-                                            {items.length === 0 && <p className="text-sm text-center text-[var(--text-secondary)] py-4">המרחב הזה ריק.</p>}
+                                            {items.length === 0 && <p className="text-sm text-center text-[var(--text-secondary)] py-4">אין פריטים התואמים לחיפוש במרחב זה.</p>}
                                         </div>
                                     )}
                                 </div>
@@ -364,7 +493,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
 
 
     return (
-        <div className="pt-4 pb-8 space-y-6">
+        <div className={`pt-4 pb-8 space-y-6 ${selectionMode ? 'selection-mode' : ''}`}>
              <header ref={headerRef} className="flex justify-between items-center sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20 border-b border-[var(--border-primary)] -mx-4 px-4 transition-transform,opacity duration-300">
                 <h1 className="hero-title themed-title">
                     {settings.screenLabels?.library || 'המתכנן'}
@@ -380,8 +509,35 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
             </header>
             
             <div className={`transition-all duration-500 var(--fi-cubic-bezier) ${selectedItem || isAdding ? 'receding-background' : ''}`}>
-                <div className="px-4">
+                <div className="px-4 space-y-4">
                    <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
+                    {currentView === 'list' && (
+                        <div className="flex gap-2 animate-screen-enter">
+                            <div className="relative flex-grow">
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <SearchIcon className="h-5 w-5 text-[var(--text-secondary)]" />
+                                </div>
+                                <input
+                                    type="search"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="חפש בספרייה..."
+                                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg py-2 pr-10 pl-3 focus:outline-none focus:ring-1 focus:ring-[var(--dynamic-accent-start)] transition-all"
+                                />
+                            </div>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as any)}
+                                className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg py-2 px-3 focus:outline-none focus:ring-1 focus:ring-[var(--dynamic-accent-start)] text-sm"
+                            >
+                                <option value="date-desc">תאריך (חדש {'<'} ישן)</option>
+                                <option value="date-asc">תאריך (ישן {'<'} חדש)</option>
+                                <option value="importance">חשיבות</option>
+                                <option value="type">סוג</option>
+                                <option value="title">שם (א-ת)</option>
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <div className="pt-6">
@@ -410,7 +566,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                 onClose={handleCloseModal}
                 onUpdate={handleUpdateItem}
             />
-             {contextMenu.isOpen && contextMenu.item && (
+             {contextMenu.isOpen && contextMenu.item && !selectionMode && (
                 <PersonalItemContextMenu
                     x={contextMenu.x}
                     y={contextMenu.y}
@@ -440,6 +596,15 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                     defaultDueDate={addConfig.defaultDueDate}
                 />
             )}
+             {selectionMode && (
+                <BatchActionBar 
+                    count={selectedIds.size}
+                    onCancel={handleBatchCancel}
+                    onToggleImportant={handleBatchToggleImportant}
+                    onDuplicate={handleBatchDuplicate}
+                    onDelete={handleBatchDelete}
+                />
+             )}
              {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}
         </div>
     );

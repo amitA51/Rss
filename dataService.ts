@@ -48,14 +48,27 @@ const getStore = async (storeName: string, mode: IDBTransactionMode) => {
     return db.transaction(storeName, mode).objectStore(storeName);
 };
 
+// FIX: Correctly typed the IDBRequest to ensure type safety for the result.
+// This resolves errors where getAll() was effectively returning `unknown[]`.
 const dbGetAll = async <T>(storeName: string): Promise<T[]> => {
     const store = await getStore(storeName, 'readonly');
     return new Promise((resolve, reject) => {
-        const request = store.getAll();
+        // FIX: Add type annotation to the IDBRequest to ensure result is correctly typed.
+        const request: IDBRequest<T[]> = store.getAll();
         request.onerror = () => reject(request.error);
-        // FIX: Cast the result of the IDBRequest to the expected generic type T[]
-        // to resolve type errors where the result was being inferred as unknown[].
-        request.onsuccess = () => resolve((request.result as T[]) || []);
+        request.onsuccess = () => {
+            resolve(request.result || []);
+        };
+    });
+};
+
+// FIX: Added missing dbGet helper for efficient single-item retrieval.
+const dbGet = async <T>(storeName: string, key: IDBValidKey): Promise<T | undefined> => {
+    const store = await getStore(storeName, 'readonly');
+    return new Promise((resolve, reject) => {
+        const request: IDBRequest<T> = store.get(key);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
     });
 };
 
@@ -124,8 +137,8 @@ export const getFeedItems = async (): Promise<FeedItem[]> => {
 export const reAddFeedItem = (item: FeedItem): Promise<void> => dbPut(LS.FEED_ITEMS, item);
 
 export const updateFeedItem = async (id: string, updates: Partial<FeedItem>): Promise<FeedItem> => {
-    const items = await getFeedItems();
-    const itemToUpdate = items.find(item => item.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const itemToUpdate = await dbGet<FeedItem>(LS.FEED_ITEMS, id);
     if (!itemToUpdate) throw new Error("Item not found");
     const updatedItem = { ...itemToUpdate, ...updates };
     await dbPut(LS.FEED_ITEMS, updatedItem);
@@ -171,8 +184,8 @@ export const addPersonalItem = async (itemData: Omit<PersonalItem, 'id' | 'creat
 };
 
 export const updatePersonalItem = async (id: string, updates: Partial<PersonalItem>): Promise<PersonalItem> => {
-    const items = await getPersonalItems();
-    const itemToUpdate = items.find(item => item.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const itemToUpdate = await dbGet<PersonalItem>(LS.PERSONAL_ITEMS, id);
     if (!itemToUpdate) throw new Error("Item not found");
     const updatedItem = { ...itemToUpdate, ...updates };
     await dbPut(LS.PERSONAL_ITEMS, updatedItem);
@@ -182,8 +195,8 @@ export const updatePersonalItem = async (id: string, updates: Partial<PersonalIt
 export const removePersonalItem = (id: string): Promise<void> => dbDelete(LS.PERSONAL_ITEMS, id);
 
 export const duplicatePersonalItem = async (id: string): Promise<PersonalItem> => {
-    const items = await getPersonalItems();
-    const originalItem = items.find(item => item.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const originalItem = await dbGet<PersonalItem>(LS.PERSONAL_ITEMS, id);
     if (!originalItem) throw new Error("Item not found");
     const duplicatedItem: PersonalItem = {
         ...JSON.parse(JSON.stringify(originalItem)),
@@ -197,8 +210,8 @@ export const duplicatePersonalItem = async (id: string): Promise<PersonalItem> =
 };
 
 export const logFocusSession = async (itemId: string, durationInMinutes: number): Promise<PersonalItem> => {
-    const items = await getPersonalItems();
-    const itemToUpdate = items.find(item => item.id === itemId);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const itemToUpdate = await dbGet<PersonalItem>(LS.PERSONAL_ITEMS, itemId);
     if (!itemToUpdate) throw new Error("Item not found");
     const newSession = { date: new Date().toISOString(), duration: durationInMinutes };
     const updatedItem = { ...itemToUpdate, focusSessions: [...(itemToUpdate.focusSessions || []), newSession] };
@@ -248,6 +261,7 @@ export const addTemplate = async (templateData: Omit<Template, 'id'>): Promise<T
 
 export const getSpaces = async (): Promise<Space[]> => {
     const spaces = await initializeDefaultData(LS.SPACES, defaultSpaces);
+    // FIX: Ensure correct sorting after fixing the type issue with dbGetAll.
     return spaces.sort((a, b) => a.order - b.order);
 };
 
@@ -267,8 +281,8 @@ export const reAddFeed = (item: RssFeed): Promise<void> => dbPut(LS.RSS_FEEDS, i
 
 export const removeFeed = (id: string): Promise<void> => dbDelete(LS.RSS_FEEDS, id);
 export const updateFeed = async (id: string, updates: Partial<RssFeed>): Promise<void> => {
-    const feeds = await getFeeds();
-    const feedToUpdate = feeds.find(f => f.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const feedToUpdate = await dbGet<RssFeed>(LS.RSS_FEEDS, id);
     if (feedToUpdate) await dbPut(LS.RSS_FEEDS, { ...feedToUpdate, ...updates });
 };
 
@@ -279,8 +293,8 @@ export const addSpace = async (spaceData: Omit<Space, 'id'>): Promise<Space> => 
 };
 
 export const updateSpace = async (id: string, updates: Partial<Space>): Promise<Space> => {
-    const spaces = await getSpaces();
-    const spaceToUpdate = spaces.find(s => s.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const spaceToUpdate = await dbGet<Space>(LS.SPACES, id);
     if (!spaceToUpdate) throw new Error("Space not found");
     const updatedSpace = { ...spaceToUpdate, ...updates };
     await dbPut(LS.SPACES, updatedSpace);
@@ -359,8 +373,8 @@ export const removeCustomMentor = async (id: string): Promise<void> => {
 };
 
 export const refreshMentorContent = async (id: string): Promise<Mentor> => {
-    const mentors = await getCustomMentors();
-    const mentorToUpdate = mentors.find(m => m.id === id);
+    // FIX: Refactored to use efficient dbGet instead of fetching all items.
+    const mentorToUpdate = await dbGet<Mentor>(LS.CUSTOM_MENTORS, id);
     if (!mentorToUpdate) throw new Error("Mentor not found.");
     const newQuotes = await generateMentorContent(mentorToUpdate.name);
     const updatedMentor = { ...mentorToUpdate, quotes: newQuotes };

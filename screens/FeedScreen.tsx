@@ -420,7 +420,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
                    <button
                       onClick={() => handleRefresh(false)}
                       disabled={isRefreshing || isLoading}
-                      className="bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-6 rounded-2xl transition-all transform active:scale-95 flex items-center gap-2 disabled:opacity-50"
+                      className="bg-[var(--accent-gradient)] hover:brightness-110 text-white font-bold py-3 px-6 rounded-2xl transition-all transform active:scale-95 flex items-center gap-2 disabled:opacity-50 hover:shadow-[0_0_15px_var(--dynamic-accent-glow)]"
                   >
                     <RefreshIcon className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     <span>רענן פידים</span>

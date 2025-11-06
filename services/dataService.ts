@@ -48,14 +48,16 @@ const getStore = async (storeName: string, mode: IDBTransactionMode) => {
     return db.transaction(storeName, mode).objectStore(storeName);
 };
 
+// FIX: Correctly typed the IDBRequest to ensure type safety for the result.
+// This resolves errors where getAll() was effectively returning `unknown[]`.
 const dbGetAll = async <T>(storeName: string): Promise<T[]> => {
     const store = await getStore(storeName, 'readonly');
     return new Promise((resolve, reject) => {
-        const request = store.getAll();
+        const request: IDBRequest<T[]> = store.getAll();
         request.onerror = () => reject(request.error);
-        // FIX: Cast the result of the IDBRequest to the expected generic type T[].
-        // The result from IndexedDB is `unknown[]` and needs to be cast to prevent type errors.
-        request.onsuccess = () => resolve((request.result as T[]) || []);
+        request.onsuccess = () => {
+            resolve(request.result || []);
+        };
     });
 };
 

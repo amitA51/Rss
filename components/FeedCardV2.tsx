@@ -38,12 +38,6 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
     onContextMenu(e, item);
   }
 
-  const handleLongPress = (e: React.MouseEvent) => {
-    e.preventDefault();
-    onLongPress(item);
-  }
-
-
   useEffect(() => {
     const card = cardRef.current;
     if (!card || cardStyle !== 'glass') return;
@@ -89,19 +83,14 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
     <div
       ref={cardRef}
       onClick={(e) => onSelect(item, e)}
-      onContextMenu={(e) => { e.preventDefault(); isInSelectionMode ? onSelect(item, e) : handleLongPress(e); }}
-      className={`group relative themed-card p-4 transition-all duration-300 ease-out cursor-pointer
-        hover:-translate-y-1 
-        active:scale-[0.98] active:duration-100
-        ${item.is_read && !isInSelectionMode ? 'opacity-60 hover:opacity-80' : ''}
+      onContextMenu={(e) => { e.preventDefault(); isInSelectionMode ? onSelect(item, e) : onContextMenu(e, item); }}
+      className={`group relative themed-card p-4 transition-all duration-300 ease-[var(--fi-cubic-bezier)] cursor-pointer
+        ${item.is_read && !isInSelectionMode ? 'opacity-60 hover:opacity-90' : ''}
         ${isSelected ? 'selected' : ''}`}
-      style={{
-        borderRadius: '18px'
-      }}
     >
       {cardStyle === 'glass' && (
         <div 
-          className="absolute inset-0 rounded-[17px] opacity-0 group-hover:opacity-100 transition-opacity duration-300" 
+          className="absolute inset-0 rounded-[23px] opacity-0 group-hover:opacity-100 transition-opacity duration-300" 
           style={{
             background: `radial-gradient(400px circle at var(--mouse-x) var(--mouse-y), var(--dynamic-accent-glow), transparent)`
           }}
@@ -109,13 +98,13 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
       )}
       
        {isInSelectionMode && (
-          <div className={`absolute top-3 left-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-[var(--dynamic-accent-start)] border-[var(--dynamic-accent-start)]' : 'border-gray-500 bg-black/20'}`}>
+          <div className={`absolute top-4 left-4 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-[var(--dynamic-accent-start)] border-[var(--dynamic-accent-start)]' : 'border-gray-500 bg-black/20'}`}>
               {isSelected && <CheckCircleIcon className="w-7 h-7 text-white" />}
           </div>
        )}
 
       <div className={`flex items-start gap-4 relative transition-opacity ${isInSelectionMode ? 'opacity-80' : ''}`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bg-secondary)] text-[var(--dynamic-accent-highlight)] mt-1">
+        <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-[var(--bg-secondary)] text-[var(--dynamic-accent-highlight)] mt-1">
           {icon}
         </div>
         <div className="flex-1 overflow-hidden">
