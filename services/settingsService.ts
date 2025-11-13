@@ -44,6 +44,7 @@ const defaultSettings: AppSettings = {
     autoStartNext: true,
   },
   homeScreenLayout: [
+    { id: 'google_calendar', isVisible: true },
     { id: 'gratitude', isVisible: true },
     { id: 'habits', isVisible: true },
     { id: 'tasks', isVisible: true },
@@ -52,6 +53,7 @@ const defaultSettings: AppSettings = {
     gratitude: 'הכרת תודה',
     habits: 'הרגלים להיום',
     tasks: 'משימות פתוחות',
+    google_calendar: 'סדר יום',
   },
   // New Personalization Settings
   hapticFeedback: true,
@@ -64,6 +66,12 @@ const defaultSettings: AppSettings = {
       shortBreak: 5,
       longBreak: 15,
       sessionsUntilLongBreak: 4,
+  },
+  aiFeedSettings: {
+    isEnabled: true,
+    topics: ['סייבר', 'פסיכולוגיה', 'כלכלה התנהגותית', 'שוק ההון', 'עסקים', 'פיננסים'],
+    itemsPerRefresh: 3,
+    customPrompt: '',
   },
 };
 
@@ -131,6 +139,7 @@ export const loadSettings = (): AppSettings => {
           navBarLayout: (Array.isArray(parsed.navBarLayout) && parsed.navBarLayout.length > 0) ? parsed.navBarLayout : defaultSettings.navBarLayout,
           enabledMentorIds: parsed.enabledMentorIds || [],
           pomodoroSettings: { ...defaultSettings.pomodoroSettings, ...parsed.pomodoroSettings },
+          aiFeedSettings: { ...defaultSettings.aiFeedSettings, ...parsed.aiFeedSettings },
       };
     }
   } catch (error) {

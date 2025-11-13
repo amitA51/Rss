@@ -1,24 +1,27 @@
-import React, { useState, useMemo, useCallback, useContext } from 'react';
+import React, { useState, useMemo, useCallback, useContext, useRef } from 'react';
 import type { PersonalItem, Screen, Space } from '../types';
 import PersonalItemDetailModal from '../components/PersonalItemDetailModal';
 import PersonalItemContextMenu from '../components/PersonalItemContextMenu';
 import ProjectDetailScreen from '../components/ProjectDetailScreen';
 import TimelineView from '../components/TimelineView';
-import { SettingsIcon, LayoutDashboardIcon, CalendarIcon, ListIcon, TargetIcon, SparklesIcon, InboxIcon, ChevronLeftIcon, SearchIcon } from '../components/icons';
+import { SettingsIcon, LayoutDashboardIcon, CalendarIcon, ListIcon, TargetIcon, SparklesIcon, InboxIcon, ChevronLeftIcon, SearchIcon, DragHandleIcon, ShieldCheckIcon, StopwatchIcon } from '../components/icons';
 import { getIconForName } from '../components/IconMap';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { AppContext } from '../state/AppContext';
-import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, reAddPersonalItem } from '../services/dataService';
+import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, reAddPersonalItem, updateSpace } from '../services/dataService';
 import { useContextMenu } from '../hooks/useContextMenu';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
 import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
-import SpaceDetailScreen from '../components/SpaceDetailScreen';
+import SpaceDetailScreen from './SpaceDetailScreen';
 import PersonalItemCard from '../components/PersonalItemCard';
 import { useDebounce } from '../hooks/useDebounce';
+import { useItemReordering } from '../hooks/useItemReordering';
+import PasswordManager from '../components/password/PasswordManager';
+import { useModal } from '../state/ModalContext';
 
 
-type HubView = 'dashboard' | 'timeline' | 'board' | 'calendar';
+type HubView = 'dashboard' | 'timeline' | 'board' | 'calendar' | 'vault';
 type ActiveView = 
   | { type: HubView }
   | { type: 'project', item: PersonalItem }
@@ -35,6 +38,7 @@ const ViewSwitcher: React.FC<{
         { id: 'timeline', icon: ListIcon, label: 'ציר זמן' },
         { id: 'board', icon: LayoutDashboardIcon, label: 'לוח' },
         { id: 'calendar', icon: CalendarIcon, label: 'לוח שנה' },
+        { id: 'vault', icon: ShieldCheckIcon, label: 'כספת' },
     ] as const;
 
     return (
@@ -60,6 +64,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     const { state, dispatch } = useContext(AppContext);
     const { personalItems, spaces, isLoading, settings } = state;
     const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<PersonalItem>();
+    const { openModal } = useModal();
     
     const [activeView, setActiveView] = useState<ActiveView>({ type: 'dashboard' });
     const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
@@ -67,17 +72,13 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     const [searchQuery, setSearchQuery] = useState('');
     const debouncedQuery = useDebounce(searchQuery, 200);
 
+    // --- State for Dashboard reordering ---
+    const dragSpace = useRef<Space | null>(null);
+    const dragOverSpace = useRef<Space | null>(null);
+    const [draggingSpace, setDraggingSpace] = useState<Space | null>(null);
+
     const showStatus = useCallback((type: StatusMessageType, text: string, onUndo?: () => void) => {
         setStatusMessage({ type, text, id: Date.now(), onUndo });
-    }, []);
-
-    const handleSelectItem = useCallback((item: PersonalItem, event?: React.MouseEvent | React.KeyboardEvent) => {
-        event?.stopPropagation();
-        setSelectedItem(item);
-    }, []);
-    
-    const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
-        setSelectedItem(nextItem || null);
     }, []);
 
     const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
@@ -110,6 +111,23 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
         });
     }, [dispatch, personalItems, showStatus]);
 
+    const handleSelectItem = useCallback((item: PersonalItem, event?: React.MouseEvent | React.KeyboardEvent) => {
+        event?.stopPropagation();
+        if (item.type === 'roadmap') {
+            openModal('roadmapScreen', { 
+                item,
+                onUpdate: handleUpdateItem,
+                onDelete: handleDeleteItem,
+            });
+            return;
+        }
+        setSelectedItem(item);
+    }, [openModal, handleUpdateItem, handleDeleteItem]);
+    
+    const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
+        setSelectedItem(nextItem || null);
+    }, []);
+
     const handleDeleteWithConfirmation = useCallback((id: string) => {
         const itemToDelete = personalItems.find(item => item.id === id);
         if (itemToDelete && window.confirm(`האם למחוק את "${itemToDelete.title}"?`)) {
@@ -129,11 +147,75 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     }, [dispatch]);
 
     const { inboxItems, projectItems, personalSpaces } = useMemo(() => {
-        const inbox = personalItems.filter(i => !i.spaceId && !i.projectId && i.type !== 'goal');
-        const projects = personalItems.filter(i => i.type === 'goal');
-        const pSpaces = spaces.filter(s => s.type === 'personal');
+        const inbox = personalItems
+            .filter(i => !i.spaceId && !i.projectId && i.type !== 'goal')
+            .sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const projects = personalItems
+            .filter(i => i.type === 'goal')
+            .sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const pSpaces = spaces
+            .filter(s => s.type === 'personal')
+            .sort((a,b) => a.order - b.order);
         return { inboxItems: inbox, projectItems: projects, personalSpaces: pSpaces };
     }, [personalItems, spaces]);
+    
+    // --- Reordering hooks ---
+    const inboxReordering = useItemReordering(inboxItems, handleUpdateItem);
+    const projectReordering = useItemReordering(projectItems, handleUpdateItem);
+
+    const handleSpaceDrop = () => {
+        const draggedSpace = dragSpace.current;
+        const targetSpace = dragOverSpace.current;
+
+        if (!draggedSpace || !targetSpace || draggedSpace.id === targetSpace.id) {
+            setDraggingSpace(null);
+            return;
+        }
+        
+        const currentSpaces = [...personalSpaces];
+        const dragItemIndex = currentSpaces.findIndex(s => s.id === draggedSpace.id);
+        const dragOverItemIndex = currentSpaces.findIndex(s => s.id === targetSpace.id);
+
+        if (dragItemIndex === -1 || dragOverItemIndex === -1) return;
+
+        let newOrder: number;
+
+        // Moving UP the list (to a smaller index)
+        if (dragItemIndex > dragOverItemIndex) {
+            const prevItem = currentSpaces[dragOverItemIndex - 1];
+            const nextItem = currentSpaces[dragOverItemIndex];
+            if (prevItem) {
+                newOrder = (prevItem.order + nextItem.order) / 2;
+            } else { // Dropped at the very top
+                newOrder = nextItem.order - 1000;
+            }
+        } else { // Moving DOWN the list (to a larger index)
+            const prevItem = currentSpaces[dragOverItemIndex];
+            const nextItem = currentSpaces[dragOverItemIndex + 1];
+            if (nextItem) {
+                newOrder = (prevItem.order + nextItem.order) / 2;
+            } else { // Dropped at the very bottom
+                newOrder = prevItem.order + 1000;
+            }
+        }
+        
+        const updates = { order: newOrder };
+        
+        // Optimistic dispatch
+        dispatch({ type: 'UPDATE_SPACE', payload: { id: draggedSpace.id, updates } });
+        
+        // Persist change with error handling
+        updateSpace(draggedSpace.id, updates).catch(err => {
+            console.error("Failed to update space order:", err);
+            // Rollback
+            dispatch({ type: 'UPDATE_SPACE', payload: { id: draggedSpace.id, updates: { order: draggedSpace.order } } });
+        });
+        
+        setDraggingSpace(null);
+        dragSpace.current = null;
+        dragOverSpace.current = null;
+    };
+
 
     const searchResults = useMemo(() => {
         if (!debouncedQuery) return [];
@@ -157,7 +239,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
             </div>
              <div className="relative">
                 <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                    <SearchIcon className="h-5 w-5 text-[var(--text-secondary)]" />
+                    <SearchIcon className="h-5 h-5 text-[var(--text-secondary)]" />
                 </div>
                 <input
                     type="search"
@@ -214,40 +296,59 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                             {projectItems.length > 0 && (
                                 <section>
                                     <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 px-1">פרויקטים</h2>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" onDrop={projectReordering.handleDrop}>
                                         {projectItems.map(project => {
-                                            const childTasks = personalItems.filter(i => i.projectId === project.id && (i.type === 'task' || i.type === 'roadmap' || (i.steps && i.steps.length > 0)));
+                                            const childItems = personalItems.filter(i => i.projectId === project.id);
+                                            const childTasks = childItems.filter(i => i.type === 'task' || i.type === 'roadmap' || (i.phases && i.phases.length > 0));
+
                                             const completedTasks = childTasks.reduce((acc, i) => {
                                                 if (i.type === 'task' && i.isCompleted) return acc + 1;
-                                                if (i.type === 'roadmap' && i.steps) return acc + i.steps.filter(s => s.isCompleted).length;
+                                                if (i.type === 'roadmap' && i.phases) return acc + i.phases.flatMap(p => p.tasks).filter(t => t.isCompleted).length;
                                                 return acc;
                                             }, 0);
                                             const totalTasks = childTasks.reduce((acc, i) => {
                                                 if (i.type === 'task') return acc + 1;
-                                                if (i.type === 'roadmap' && i.steps) return acc + i.steps.length;
+                                                if (i.type === 'roadmap' && i.phases) return acc + i.phases.flatMap(p => p.tasks).length;
                                                 return acc;
                                             }, 0);
                                             
+                                            const totalFocusMinutes = childItems.reduce((total, item) => {
+                                                return total + (item.focusSessions || []).reduce((itemTotal, session) => itemTotal + session.duration, 0);
+                                            }, 0);
+
                                             const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
                                             
                                             return (
-                                                <button key={project.id} onClick={() => setActiveView({ type: 'project', item: project })} className="themed-card p-4 text-right space-y-3 hover:-translate-y-1 transition-transform">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-400">
-                                                            <TargetIcon className="w-6 h-6"/>
+                                                <div 
+                                                    key={project.id} 
+                                                    draggable
+                                                    onDragStart={(e) => projectReordering.handleDragStart(e, project)}
+                                                    onDragEnter={(e) => projectReordering.handleDragEnter(e, project)}
+                                                    onDragEnd={projectReordering.handleDragEnd}
+                                                    onDragOver={(e) => e.preventDefault()}
+                                                    className={`cursor-grab ${projectReordering.draggingItem?.id === project.id ? 'dragging-item' : ''}`}
+                                                >
+                                                    <button onClick={() => setActiveView({ type: 'project', item: project })} className="w-full themed-card p-4 text-right space-y-3 hover:-translate-y-1 transition-transform">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-400">
+                                                                <TargetIcon className="w-6 h-6"/>
+                                                            </div>
+                                                            <h3 className="text-lg font-bold text-white truncate">{project.title}</h3>
                                                         </div>
-                                                        <h3 className="text-lg font-bold text-white truncate">{project.title}</h3>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1">
-                                                            <span>{completedTasks}/{totalTasks} הושלמו</span>
-                                                            <span>{Math.round(progress)}%</span>
+                                                        <div>
+                                                            <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1">
+                                                                <span>{completedTasks}/{totalTasks} הושלמו</span>
+                                                                {totalFocusMinutes > 0 && (
+                                                                    <span className="flex items-center gap-1"><StopwatchIcon className="w-3 h-3"/> {Math.floor(totalFocusMinutes/60)}ש {totalFocusMinutes % 60}ד</span>
+                                                                )}
+                                                                <span>{Math.round(progress)}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-[var(--bg-card)] rounded-full h-1.5 border border-[var(--border-primary)]">
+                                                                <div className="bg-[var(--accent-gradient)] h-1 rounded-full" style={{width: `${progress}%`}}></div>
+                                                            </div>
                                                         </div>
-                                                        <div className="w-full bg-[var(--bg-card)] rounded-full h-1.5 border border-[var(--border-primary)]">
-                                                            <div className="bg-[var(--accent-gradient)] h-1 rounded-full" style={{width: `${progress}%`}}></div>
-                                                        </div>
-                                                    </div>
-                                                </button>
+                                                    </button>
+                                                </div>
                                             )
                                         })}
                                     </div>
@@ -257,18 +358,28 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                             {personalSpaces.length > 0 && (
                                 <section>
                                     <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 px-1">מרחבים</h2>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" onDrop={handleSpaceDrop}>
                                         {personalSpaces.map(space => {
                                             const Icon = getIconForName(space.icon);
                                             const itemCount = personalItems.filter(i => i.spaceId === space.id).length;
                                             return (
-                                                <button key={space.id} onClick={() => setActiveView({ type: 'space', item: space })} className="themed-card p-3 flex flex-col items-center justify-center text-center aspect-square hover:-translate-y-1 transition-transform">
-                                                    <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{backgroundColor: `${space.color}20`, color: space.color}}>
-                                                        <Icon className="w-6 h-6" />
-                                                    </div>
-                                                    <span className="font-semibold text-white text-sm truncate">{space.name}</span>
-                                                    <span className="text-xs text-[var(--text-secondary)]">{itemCount} פריטים</span>
-                                                </button>
+                                                <div
+                                                    key={space.id}
+                                                    draggable
+                                                    onDragStart={() => { dragSpace.current = space; setDraggingSpace(space); }}
+                                                    onDragEnter={() => dragOverSpace.current = space}
+                                                    onDragEnd={handleSpaceDrop}
+                                                    onDragOver={(e) => e.preventDefault()}
+                                                    className={`cursor-grab ${draggingSpace?.id === space.id ? 'dragging-item' : ''}`}
+                                                >
+                                                    <button onClick={() => setActiveView({ type: 'space', item: space })} className="w-full themed-card p-3 flex flex-col items-center justify-center text-center aspect-square hover:-translate-y-1 transition-transform">
+                                                        <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{backgroundColor: `${space.color}20`, color: space.color}}>
+                                                            <Icon className="w-6 h-6" />
+                                                        </div>
+                                                        <span className="font-semibold text-white text-sm truncate">{space.name}</span>
+                                                        <span className="text-xs text-[var(--text-secondary)]">{itemCount} פריטים</span>
+                                                    </button>
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -279,6 +390,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                     {!isLoading && activeView.type === 'timeline' && <TimelineView items={personalItems} onSelectItem={handleSelectItem} />}
                     {!isLoading && activeView.type === 'board' && <KanbanView items={personalItems} onUpdate={handleUpdateItem} onSelectItem={handleSelectItem} onQuickAdd={() => {}} onDelete={handleDeleteItem} />}
                     {!isLoading && activeView.type === 'calendar' && <CalendarView items={personalItems} onUpdate={handleUpdateItem} onSelectItem={handleSelectItem} onQuickAdd={() => {}} />}
+                    {!isLoading && activeView.type === 'vault' && <PasswordManager />}
                 </div>
             </div>
         )}
@@ -294,6 +406,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
     }
 
     if (activeView.type === 'inbox') {
+        const contextItems = inboxItems;
         return (
             <div className="animate-screen-enter">
                  <header className="flex items-center gap-4 -mx-4 px-4 sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-md py-3 z-20">
@@ -302,7 +415,7 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                     </button>
                     <h1 className="hero-title themed-title">תיבת דואר נכנס</h1>
                 </header>
-                <div className="space-y-3 px-4 pt-4">
+                <div className="space-y-3 px-4 pt-4" onDrop={inboxReordering.handleDrop}>
                     {inboxItems.map((item, index) => (
                         <PersonalItemCard
                             key={item.id}
@@ -315,9 +428,14 @@ const LibraryScreen: React.FC<{ setActiveScreen: (screen: Screen) => void }> = (
                             onLongPress={(_item: PersonalItem) => {}}
                             isInSelectionMode={false}
                             isSelected={false}
+                            onDragStart={(e, item) => inboxReordering.handleDragStart(e, item)}
+                            onDragEnter={(e, item) => inboxReordering.handleDragEnter(e, item)}
+                            onDragEnd={inboxReordering.handleDragEnd}
+                            isDragging={inboxReordering.draggingItem?.id === item.id}
                         />
                     ))}
                 </div>
+                 {selectedItem && <PersonalItemDetailModal item={selectedItem} contextItems={contextItems} onClose={handleCloseModal} onUpdate={handleUpdateItem} onDelete={handleDeleteWithConfirmation} />}
             </div>
         )
     }

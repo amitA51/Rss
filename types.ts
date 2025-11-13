@@ -19,10 +19,12 @@ export interface Space {
 }
 
 export interface Attachment {
+  id: string;
   name: string;
   type: 'drive' | 'local';
   url: string; // Google Drive link or Data URL for local file
   mimeType: string;
+  size: number; // in bytes
 }
 
 export interface FeedItem {
@@ -39,6 +41,12 @@ export interface FeedItem {
   createdAt: string;
   attachments?: Attachment[];
   source?: string; // e.g., 'BTC' for news, RSS feed ID, or mentor ID `mentor:jordan-peterson`
+  insights?: string[];
+  topics?: string[];
+  level?: string;
+  estimated_read_time_min?: number;
+  source_trust_score?: number;
+  digest?: string;
 }
 
 export interface RssFeed {
@@ -65,20 +73,46 @@ export interface FocusSession {
   duration: number; // in minutes
 }
 
-export interface RoadmapStep {
+// --- NEW ROADMAP HIERARCHY ---
+
+export interface SubTask { // Level 3: A simple sub-task for a parent task
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
+export interface RoadmapTask { // Level 2: An actionable task within a phase
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  order: number;
+  subTasks?: SubTask[]; // Can have its own sub-tasks
+}
+
+export interface RoadmapPhase { // Level 1: A major stage or step in the roadmap
   id: string;
   title: string;
   description: string;
-  duration: string; // e.g., "2 weeks", "1 day"
-  isCompleted: boolean;
+  duration: string; // Deprecated, but kept for old data. New logic uses dates.
+  startDate: string; // ISO Date string 'YYYY-MM-DD'
+  endDate: string; // ISO Date string 'YYYY-MM-DD'
   notes?: string;
-  subTasks?: SubTask[];
+  tasks: RoadmapTask[];
+  order: number;
+  attachments: Attachment[];
+  status: 'pending' | 'active' | 'completed';
+  dependencies: string[]; // Array of other phase IDs this phase depends on
+  estimatedHours: number;
+  // New fields for premium features
+  aiSummary?: string;
+  aiActions?: string[];
+  aiQuote?: string;
 }
 
-export interface SubTask {
+
+export interface SubHabit {
   id: string;
   title: string;
-  isCompleted: boolean;
 }
 
 export interface PersonalItem {
@@ -91,6 +125,7 @@ export interface PersonalItem {
   spaceId?: string; // New: For categorization into Spaces
   attachments?: Attachment[];
   icon?: string; // Icon identifier for the item
+  order?: number; // For user-defined ordering
   
   // Link specific
   url?: string;
@@ -107,6 +142,7 @@ export interface PersonalItem {
   priority?: 'low' | 'medium' | 'high';
   focusSessions?: FocusSession[];
   subTasks?: SubTask[];
+  autoDeleteAfter?: number; // In days. 0 or undefined means never.
 
   // Habit specific
   streak?: number;
@@ -115,6 +151,8 @@ export interface PersonalItem {
   frequency?: 'daily' | 'weekly';
   reminderEnabled?: boolean;
   reminderTime?: string; // "HH:mm" format
+  subHabits?: SubHabit[];
+  lastCompletedSubHabits?: Record<string, string>; // { [subHabitId]: ISO_DATE_STRING }
   
   // Book specific
   author?: string;
@@ -124,7 +162,7 @@ export interface PersonalItem {
   coverImageUrl?: string;
 
   // Roadmap specific
-  steps?: RoadmapStep[];
+  phases?: RoadmapPhase[]; // Replaces 'steps' with the new hierarchical structure
 
   // For Kanban board view
   status?: 'todo' | 'doing' | 'done';
@@ -166,7 +204,7 @@ export interface Template {
 export type AddableType = PersonalItemType | 'spark' | 'ticker';
 export type AppFont = 'inter' | 'lato' | 'source-code-pro' | 'heebo' | 'rubik' | 'alef';
 export type CardStyle = 'glass' | 'flat' | 'bordered';
-export type HomeScreenComponentId = 'gratitude' | 'habits' | 'tasks';
+export type HomeScreenComponentId = 'gratitude' | 'habits' | 'tasks' | 'google_calendar';
 export type UiDensity = 'comfortable' | 'compact';
 export type FeedViewMode = 'list' | 'visual';
 export type AnimationIntensity = 'off' | 'subtle' | 'default' | 'full';
@@ -184,6 +222,13 @@ export interface IntervalTimerSettings {
   restDuration: number; // in seconds
   workDuration: number; // in seconds
   autoStartNext: boolean;
+}
+
+export interface AiFeedSettings {
+    isEnabled: boolean;
+    topics: string[];
+    itemsPerRefresh: number;
+    customPrompt: string;
 }
 
 export interface PomodoroSettings {
@@ -226,6 +271,7 @@ export interface AppSettings {
   addScreenLayout: AddableType[];
   aiPersonality: AiPersonality;
   pomodoroSettings: PomodoroSettings;
+  aiFeedSettings: AiFeedSettings;
 }
 
 export interface WatchlistItem {
@@ -268,4 +314,37 @@ export interface Mentor {
   description: string;
   isCustom?: boolean; // To identify user-added mentors
   quotes: string[]; // The AI-generated or default content
+}
+
+// --- Google Calendar Integration Types ---
+export interface GoogleCalendarEvent {
+  summary: string;
+  start: { dateTime?: string; date?: string };
+  end: { dateTime?: string; date?: string };
+  htmlLink: string;
+}
+
+// --- New Types for Password Manager ---
+export interface EncryptedField {
+  iv: string;
+  data: string; // encrypted string
+}
+export interface PasswordItem {
+  id: string;
+  site: string;
+  username: string;
+  password: string | EncryptedField;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  isSensitive?: boolean;
+}
+
+export interface EncryptedVault {
+  iv: string;
+  data: string; // encrypted JSON of PasswordItem[] (where some passwords may be EncryptedField)
+  salt: string; // base64 encoded
+  iterations: number;
+  lastBackup?: string; // ISO date string
 }

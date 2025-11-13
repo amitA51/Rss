@@ -2,7 +2,7 @@
 import type { PersonalItemType } from "./types";
 
 /**
- * Centralized keys for localStorage to prevent typos and ensure consistency.
+ * Centralized keys for localStorage and IndexedDB to prevent typos and ensure consistency.
  */
 export const LOCAL_STORAGE_KEYS = {
   SETTINGS: 'spark_settings',
@@ -14,6 +14,8 @@ export const LOCAL_STORAGE_KEYS = {
   WATCHLIST: 'spark_watchlist',
   SPACES: 'spark_spaces',
   CUSTOM_MENTORS: 'spark_custom_mentors',
+  AUTH_TOKENS: 'spark_auth_tokens', // For Google Auth
+  PASSWORD_VAULT: 'spark_password_vault', // For Password Manager
 };
 
 /**

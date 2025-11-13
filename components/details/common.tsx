@@ -1,5 +1,6 @@
 import React, { RefObject, useRef, useState, useEffect } from 'react';
-import { Attachment, PersonalItem, Exercise, RoadmapStep, SubTask, WorkoutSet } from '../../types';
+// FIX: Replaced non-existent `RoadmapStep` with `RoadmapPhase`.
+import { Attachment, PersonalItem, Exercise, RoadmapPhase, SubTask, WorkoutSet } from '../../types';
 import { AVAILABLE_ICONS } from '../../constants';
 import { getIconForName } from '../IconMap';
 import { BoldIcon, ItalicIcon, StrikethroughIcon, Heading1Icon, Heading2Icon, QuoteIcon, ListIcon, CheckCircleIcon, CodeIcon, UploadIcon, MicrophoneIcon, TrashIcon, getFileIcon } from '../icons';
@@ -20,22 +21,24 @@ export interface EditState {
     dueDate: string;
     priority: 'low' | 'medium' | 'high';
     subTasks: SubTask[];
+    autoDeleteAfter?: number;
     author: string;
     totalPages: string;
     quotes: string[];
     exercises: Exercise[];
-    steps: RoadmapStep[];
+    // FIX: Renamed `steps` to `phases` to match the data model.
+    phases: RoadmapPhase[];
     url: string;
 }
 
 export type EditAction =
-    | { type: 'SET_FIELD'; field: keyof EditState; value: any }
+    | { type: 'SET_FIELD'; payload: { field: keyof EditState; value: any } }
     | { type: 'RESET'; payload: PersonalItem };
 
 export function editReducer(state: EditState, action: EditAction): EditState {
     switch (action.type) {
         case 'SET_FIELD':
-            return { ...state, [action.field]: action.value };
+            return { ...state, [action.payload.field]: action.payload.value };
         case 'RESET':
             const item = action.payload;
             return createInitialEditState(item);
@@ -55,11 +58,13 @@ export const createInitialEditState = (item: PersonalItem): EditState => ({
     dueDate: item.dueDate || '',
     priority: item.priority || 'medium',
     subTasks: item.subTasks ? JSON.parse(JSON.stringify(item.subTasks)) : [],
+    autoDeleteAfter: item.autoDeleteAfter || 0,
     author: item.author || '',
     totalPages: item.totalPages?.toString() || '',
     quotes: item.quotes || [],
     exercises: item.exercises ? JSON.parse(JSON.stringify(item.exercises)) : [],
-    steps: item.steps ? JSON.parse(JSON.stringify(item.steps)) : [],
+    // FIX: Changed `item.steps` to `item.phases` to reflect the updated data structure.
+    phases: item.phases ? JSON.parse(JSON.stringify(item.phases)) : [],
     url: item.url || '',
 });
 
@@ -90,24 +95,6 @@ export const MarkdownToolbar: React.FC<{ onInsert: (syntax: string, endSyntax?: 
         <button type="button" onClick={() => onInsert('\n- ')} className="p-2 hover:bg-white/10 rounded-md"><ListIcon className="w-5 h-5"/></button>
         <button type="button" onClick={() => onInsert('\n[ ] ')} className="p-2 hover:bg-white/10 rounded-md"><CheckCircleIcon className="w-5 h-5"/></button>
         <button type="button" onClick={() => onInsert('`', '`')} className="p-2 hover:bg-white/10 rounded-md"><CodeIcon className="w-5 h-5"/></button>
-    </div>
-);
-
-export const IconPicker: React.FC<{ selected: string; onSelect: (icon: string) => void }> = ({ selected, onSelect }) => (
-    <div className="grid grid-cols-6 sm:grid-cols-8 gap-2">
-        {AVAILABLE_ICONS.map(iconName => {
-            const Icon = getIconForName(iconName);
-            return (
-                <button
-                    key={iconName}
-                    type="button"
-                    onClick={() => onSelect(iconName)}
-                    className={`h-12 w-12 flex items-center justify-center rounded-lg transition-all ${selected === iconName ? 'bg-[var(--accent-start)] text-white ring-2 ring-offset-2 ring-offset-[var(--bg-card)] ring-[var(--accent-start)]' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-white/10'}`}
-                >
-                    <Icon className="h-6 w-6" />
-                </button>
-            );
-        })}
     </div>
 );
 

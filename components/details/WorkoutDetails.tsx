@@ -30,36 +30,30 @@ export const WorkoutEdit: React.FC<EditProps> = ({ editState, dispatch }) => {
     const handleUpdateExercise = (exIndex: number, field: keyof Exercise, value: any) => {
         const newExercises = [...(editState.exercises || [])];
         (newExercises[exIndex] as any)[field] = value;
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
     const handleAddExercise = () => {
         const newExercises = [...(editState.exercises || []), {id: `ex-${Date.now()}`, name: '', sets: [{reps:0, weight: 0}]}];
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
     const handleRemoveExercise = (exIndex: number) => {
         const newExercises = (editState.exercises || []).filter((_, i) => i !== exIndex);
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
     const handleUpdateSet = (exIndex: number, setIndex: number, field: keyof WorkoutSet, value: any) => {
         const newExercises = [...(editState.exercises || [])];
         (newExercises[exIndex].sets[setIndex] as any)[field] = value;
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
     const handleAddSet = (exIndex: number) => {
         const newExercises = [...(editState.exercises || [])];
         newExercises[exIndex].sets.push({reps: 0, weight: 0});
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
     const handleRemoveSet = (exIndex: number, setIndex: number) => {
         const newExercises = [...(editState.exercises || [])];
         newExercises[exIndex].sets = newExercises[exIndex].sets.filter((_, i) => i !== setIndex);
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type:'SET_FIELD', field: 'exercises', value: newExercises });
+        dispatch({type:'SET_FIELD', payload: { field: 'exercises', value: newExercises }});
     };
 
     return (

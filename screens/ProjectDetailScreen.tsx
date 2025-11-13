@@ -1,12 +1,16 @@
 import React, { useMemo, useContext, useState, useCallback } from 'react';
 import type { PersonalItem } from '../types';
 import { AppContext } from '../state/AppContext';
-import PersonalItemCard from './PersonalItemCard';
-import { TargetIcon, ChevronLeftIcon, LayoutDashboardIcon, ListIcon, StopwatchIcon } from './icons';
-import KanbanView from './KanbanView';
+import PersonalItemCard from '../components/PersonalItemCard';
+import { TargetIcon, ChevronLeftIcon, LayoutDashboardIcon, ListIcon, StopwatchIcon } from '../components/icons';
+import KanbanView from '../components/KanbanView';
 import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, reAddPersonalItem } from '../services/dataService';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useItemReordering } from '../hooks/useItemReordering';
+import PersonalItemDetailModal from '../components/PersonalItemDetailModal';
+import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
+import { useModal } from '../state/ModalContext';
+
 
 interface ProjectDetailScreenProps {
     project: PersonalItem;
@@ -14,11 +18,73 @@ interface ProjectDetailScreenProps {
     onSelectItem: (item: PersonalItem, event?: React.MouseEvent | React.KeyboardEvent) => void;
 }
 
-const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBack, onSelectItem }) => {
+const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBack }) => {
     const { state, dispatch } = useContext(AppContext);
     const { personalItems } = state;
     const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<PersonalItem>();
+    const { openModal } = useModal();
     const [view, setView] = useState<'list' | 'board'>('list');
+    
+    const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
+    const [statusMessage, setStatusMessage] = useState<{type: StatusMessageType, text: string, id: number, onUndo?: () => void} | null>(null);
+
+    const showStatus = useCallback((type: StatusMessageType, text: string, onUndo?: () => void) => {
+        setStatusMessage({ type, text, id: Date.now(), onUndo });
+    }, []);
+
+    const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
+        const originalItem = personalItems.find(item => item.id === id);
+        if (!originalItem) return;
+        dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates } });
+        if (selectedItem?.id === id) {
+            setSelectedItem(prev => (prev ? { ...prev, ...updates } : null));
+        }
+        try {
+            await updatePersonalItem(id, updates);
+        } catch (error) {
+            console.error("Failed to update item:", error);
+            dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates: originalItem } });
+        }
+    }, [dispatch, personalItems, selectedItem]);
+    
+    const handleDeleteItem = useCallback(async (id: string) => {
+        const itemToDelete = personalItems.find(item => item.id === id);
+        if (!itemToDelete) return;
+        
+        await removePersonalItem(id);
+        dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
+    
+        showStatus('success', 'הפריט נמחק.', async () => {
+            await reAddPersonalItem(itemToDelete);
+            dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
+        });
+    }, [dispatch, personalItems, showStatus]);
+    
+    const handleDeleteWithConfirmation = useCallback((id: string) => {
+        const itemToDelete = personalItems.find(item => item.id === id);
+        if (itemToDelete && window.confirm(`האם למחוק את "${itemToDelete.title}"?`)) {
+            handleDeleteItem(id);
+            setSelectedItem(null); // Close modal
+        }
+    }, [personalItems, handleDeleteItem]);
+    
+    const handleSelectItem = useCallback((item: PersonalItem, event?: React.MouseEvent | React.KeyboardEvent) => {
+        event?.stopPropagation();
+        if (item.type === 'roadmap') {
+            openModal('roadmapScreen', { 
+                item,
+                onUpdate: handleUpdateItem,
+                onDelete: handleDeleteItem,
+             });
+            return;
+        }
+        setSelectedItem(item);
+    }, [openModal, handleUpdateItem, handleDeleteItem]);
+    
+    const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
+        setSelectedItem(nextItem || null);
+    }, []);
+
 
     const childItems = useMemo(() => {
         return personalItems
@@ -26,25 +92,6 @@ const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBa
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [personalItems, project.id]);
     
-    const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
-        const originalItem = personalItems.find(item => item.id === id);
-        if (!originalItem) return;
-        dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates } });
-        try {
-            await updatePersonalItem(id, updates);
-        } catch (error) {
-            console.error("Failed to update item:", error);
-            dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id, updates: originalItem } });
-        }
-    }, [dispatch, personalItems]);
-    
-    const handleDeleteItem = useCallback(async (id: string) => {
-        const itemToDelete = personalItems.find(item => item.id === id);
-        if (!itemToDelete) return;
-        await removePersonalItem(id);
-        dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id });
-    }, [dispatch, personalItems]);
-
     const { draggingItem, handleDragStart, handleDragEnter, handleDragEnd, handleDrop } = useItemReordering(childItems, handleUpdateItem);
 
     const { completedTasks, totalTasks, totalFocusMinutes } = useMemo(() => {
@@ -111,7 +158,7 @@ const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBa
                                 key={item.id}
                                 item={item}
                                 index={index}
-                                onSelect={(item, e) => onSelectItem(item, e)}
+                                onSelect={(item, e) => handleSelectItem(item, e)}
                                 onUpdate={handleUpdateItem}
                                 onDelete={handleDeleteItem}
                                 onContextMenu={() => {}}
@@ -126,7 +173,7 @@ const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBa
                         ))}
                      </div>
                 ) : (
-                    <KanbanView items={childItems} onUpdate={handleUpdateItem} onSelectItem={(item, e) => onSelectItem(item, e)} onQuickAdd={() => {}} onDelete={handleDeleteItem} />
+                    <KanbanView items={childItems} onUpdate={handleUpdateItem} onSelectItem={(item, e) => handleSelectItem(item, e)} onQuickAdd={() => {}} onDelete={handleDeleteItem} />
                 )}
 
                 {childItems.length === 0 && (
@@ -135,6 +182,16 @@ const ProjectDetailScreen: React.FC<ProjectDetailScreenProps> = ({ project, onBa
                     </div>
                 )}
             </div>
+             {selectedItem && (
+                <PersonalItemDetailModal
+                    item={selectedItem}
+                    onClose={handleCloseModal}
+                    onUpdate={handleUpdateItem}
+                    onDelete={handleDeleteWithConfirmation}
+                    contextItems={childItems}
+                />
+            )}
+            {statusMessage && <StatusMessage key={statusMessage.id} type={statusMessage.type} message={statusMessage.text} onDismiss={() => setStatusMessage(null)} onUndo={statusMessage.onUndo} />}
         </div>
     )
 };

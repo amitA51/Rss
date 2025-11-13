@@ -1,4 +1,4 @@
-import type { FeedItem, PersonalItem, AppSettings, Space, AddableType, FeedViewMode } from '../types';
+import type { FeedItem, PersonalItem, AppSettings, Space, AddableType, FeedViewMode, GoogleCalendarEvent } from '../types';
 import { loadSettings, saveSettings } from '../services/settingsService';
 
 export interface AppState {
@@ -9,6 +9,8 @@ export interface AppState {
   spaces: Space[];
   settings: AppSettings;
   focusSession: { item: PersonalItem; startTime: number } | null;
+  googleAuthState: 'loading' | 'signedIn' | 'signedOut';
+  calendarEvents: GoogleCalendarEvent[];
 }
 
 export type AppAction =
@@ -17,6 +19,7 @@ export type AppAction =
   | { type: 'FETCH_ERROR'; payload: string }
   | { type: 'ADD_FEED_ITEM'; payload: FeedItem }
   | { type: 'UPDATE_FEED_ITEM'; payload: { id: string; updates: Partial<FeedItem> } }
+  | { type: 'BATCH_UPDATE_FEED_ITEMS'; payload: { id: string; updates: Partial<FeedItem> }[] }
   | { type: 'REMOVE_FEED_ITEM'; payload: string }
   | { type: 'ADD_PERSONAL_ITEM'; payload: PersonalItem }
   | { type: 'UPDATE_PERSONAL_ITEM'; payload: { id: string; updates: Partial<PersonalItem> } }
@@ -30,7 +33,9 @@ export type AppAction =
   | { type: 'START_FOCUS_SESSION'; payload: PersonalItem }
   | { type: 'CLEAR_FOCUS_SESSION' }
   | { type: 'SET_LAST_ADDED_TYPE'; payload: AddableType }
-  | { type: 'SET_FEED_VIEW_MODE'; payload: FeedViewMode };
+  | { type: 'SET_FEED_VIEW_MODE'; payload: FeedViewMode }
+  | { type: 'SET_GOOGLE_AUTH_STATE'; payload: 'loading' | 'signedIn' | 'signedOut' }
+  | { type: 'SET_CALENDAR_EVENTS'; payload: GoogleCalendarEvent[] };
 
 
 export const initialState: AppState = {
@@ -41,6 +46,8 @@ export const initialState: AppState = {
   spaces: [],
   settings: loadSettings(),
   focusSession: null,
+  googleAuthState: 'loading',
+  calendarEvents: [],
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -68,6 +75,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           item.id === action.payload.id ? { ...item, ...action.payload.updates } : item
         ),
       };
+      
+    case 'BATCH_UPDATE_FEED_ITEMS': {
+        const updatesMap = new Map(action.payload.map(u => [u.id, u.updates]));
+        return {
+            ...state,
+            feedItems: state.feedItems.map(item => 
+                updatesMap.has(item.id) ? { ...item, ...updatesMap.get(item.id) } : item
+            ),
+        };
+    }
       
     case 'REMOVE_FEED_ITEM':
       return { ...state, feedItems: state.feedItems.filter(item => item.id !== action.payload) };
@@ -145,6 +162,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'CLEAR_FOCUS_SESSION':
         return { ...state, focusSession: null };
+
+    case 'SET_GOOGLE_AUTH_STATE':
+        return { ...state, googleAuthState: action.payload };
+
+    case 'SET_CALENDAR_EVENTS':
+        return { ...state, calendarEvents: action.payload };
 
     default:
       return state;

@@ -20,7 +20,6 @@ const DynamicBackground: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const { state } = useContext(AppContext);
     const accentColor = state.settings.themeSettings.accentColor;
-    // FIX: The `useRef` hook requires an initial value. Providing `null` is a standard pattern for refs that are populated later.
     const animationFrameId = useRef<number | null>(null);
 
     const createParticles = useCallback((count: number, canvasWidth: number, canvasHeight: number) => {

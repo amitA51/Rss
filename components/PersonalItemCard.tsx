@@ -14,6 +14,8 @@ interface PersonalItemCardProps {
   index: number;
   spaceColor?: string;
   onDragStart?: (event: React.DragEvent, item: PersonalItem) => void;
+  onDragEnter?: (event: React.DragEvent, item: PersonalItem) => void;
+  onDragEnd?: (event: React.DragEvent) => void;
   isDragging?: boolean;
   onLongPress: (item: PersonalItem) => void;
   isInSelectionMode: boolean;
@@ -21,7 +23,11 @@ interface PersonalItemCardProps {
   searchQuery?: string;
 }
 
-const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onUpdate, onDelete, onContextMenu, index, spaceColor, onDragStart, isDragging, onLongPress, isInSelectionMode, isSelected, searchQuery }) => {
+const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ 
+    item, onSelect, onUpdate, onDelete, onContextMenu, index, spaceColor, 
+    onDragStart, onDragEnter, onDragEnd, isDragging, onLongPress, 
+    isInSelectionMode, isSelected, searchQuery 
+}) => {
   const { state } = useContext(AppContext);
   const longPressTimerRef = useRef<any>(null);
   const wasLongPressedRef = useRef(false);
@@ -83,9 +89,17 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onU
     onUpdate(item.id, { isImportant: !item.isImportant });
   };
   
+  // Function to escape special characters for use in a regular expression
+  const escapeRegExp = (string: string) => {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+  };
+
   const highlightMatches = (text: string, query: string) => {
     if (!query || !text) return text;
-    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    // FIX: Escape the user's query to prevent invalid regular expression errors
+    // when searching for characters like '(', '+', etc.
+    const escapedQuery = escapeRegExp(query);
+    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
     return (
         <>
             {parts.map((part, i) =>
@@ -101,12 +115,13 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onU
 
   const previewContent = useMemo(() => {
     if (item.type === 'book') return item.author;
-    if (item.type === 'roadmap') return `${item.steps?.length || 0} שלבים`;
+    // FIX: Changed `item.steps` to `item.phases` to align with the new data model for roadmaps.
+    if (item.type === 'roadmap') return `${item.phases?.length || 0} שלבים`;
     if (!item.content) return '';
     let content = item.content.split('\n')[0];
     content = content.replace(/\[[x ]\]\s*/g, '');
     return content;
-  }, [item.type, item.content, item.author, item.steps]);
+  }, [item.type, item.content, item.author, item.phases]);
 
   const cursorClass = onDragStart ? 'cursor-grab' : 'cursor-pointer';
 
@@ -131,6 +146,9 @@ const PersonalItemCard: React.FC<PersonalItemCardProps> = ({ item, onSelect, onU
         onTouchEnd={handlePointerUp}
         draggable={!!onDragStart}
         onDragStart={(e) => onDragStart && onDragStart(e, item)}
+        onDragEnter={(e) => onDragEnter && onDragEnter(e, item)}
+        onDragEnd={(e) => onDragEnd && onDragEnd(e)}
+        onDragOver={(e) => e.preventDefault()}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {

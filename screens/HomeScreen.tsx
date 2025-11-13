@@ -1,29 +1,56 @@
 import React, { useState, useCallback, useContext, useMemo, useRef, useEffect } from 'react';
-import type { PersonalItem, HomeScreenComponent, Screen, HomeScreenComponentId } from '../types';
+import type { PersonalItem, Screen } from '../types';
 import TaskItem from '../components/TaskItem';
 import HabitItem from '../components/HabitItem';
 import PersonalItemDetailModal from '../components/PersonalItemDetailModal';
 import PersonalItemContextMenu from '../components/PersonalItemContextMenu';
 import DailyBriefingModal from '../components/DailyBriefingModal';
-import GratitudeTracker from '../components/GratitudeTracker';
 import QuickAddTask from '../components/QuickAddTask';
 import DailyProgressCircle from '../components/DailyProgressCircle';
-import { SettingsIcon, SparklesIcon, DragHandleIcon, EyeIcon, EyeOffIcon, CheckSquareIcon, StopwatchIcon } from '../components/icons';
+import { SettingsIcon, SparklesIcon, EyeIcon, EyeOffIcon, CheckSquareIcon, StopwatchIcon } from '../components/icons';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { AppContext } from '../state/AppContext';
-import { saveSettings } from '../services/settingsService';
 import { generateDailyBriefing } from '../services/geminiService';
-import { useTodayItems } from '../hooks/useTodayItems';
+import { isHabitForToday } from '../hooks/useTodayItems';
 import { useContextMenu } from '../hooks/useContextMenu';
 import StatusMessage, { StatusMessageType } from '../components/StatusMessage';
 import { useHomeInteraction } from '../hooks/useHomeInteraction';
 import { rollOverIncompleteTasks } from '../services/dataService';
 import { useHaptics } from '../hooks/useHaptics';
+import { useItemReordering } from '../hooks/useItemReordering';
 
 
 interface HomeScreenProps {
     setActiveScreen: (screen: Screen) => void;
 }
+
+type ViewMode = 'today' | 'tomorrow' | 'week';
+
+const ViewSwitcher: React.FC<{
+  currentView: ViewMode;
+  onViewChange: (view: ViewMode) => void;
+}> = ({ currentView, onViewChange }) => {
+    const views: { id: ViewMode, label: string }[] = [
+        { id: 'today', label: 'היום' },
+        { id: 'tomorrow', label: 'מחר' },
+        { id: 'week', label: 'השבוע' },
+    ];
+    return (
+        <div className="flex items-center gap-1 p-1 bg-[var(--bg-secondary)] rounded-full max-w-sm mx-auto">
+            {views.map(view => (
+                <button
+                    key={view.id}
+                    onClick={() => onViewChange(view.id)}
+                    className={`flex-1 px-4 py-2 text-sm rounded-full font-medium transition-all ${
+                        currentView === view.id ? 'bg-[var(--accent-gradient)] text-white shadow-[0_0_10px_var(--dynamic-accent-glow)]' : 'text-[var(--text-secondary)] hover:text-white'
+                    }`}
+                >
+                    {view.label}
+                </button>
+            ))}
+        </div>
+    );
+};
 
 const Section: React.FC<{
     title: string;
@@ -33,9 +60,9 @@ const Section: React.FC<{
     isExpanded: boolean;
     onToggle: () => void;
     className?: string;
-    componentId: HomeScreenComponentId | 'completed';
+    componentId: string;
 }> = ({ title, children, count, isCollapsible, isExpanded, onToggle, className, componentId }) => {
-    if (count === 0 && componentId !== 'gratitude') return null;
+    if (count === 0) return null;
     const sectionContentId = `section-content-${componentId}`;
 
     return (
@@ -50,7 +77,7 @@ const Section: React.FC<{
                 <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">{title}</h2>
                 {isCollapsible && (
                      <div className="flex items-center gap-2 text-[var(--text-secondary)] p-1">
-                        {componentId !== 'gratitude' && <span className="text-xs font-mono">{count}</span>}
+                        <span className="text-xs font-mono">{count > 0 ? count : ''}</span>
                         <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -66,7 +93,6 @@ const Section: React.FC<{
 const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     const { state, dispatch } = useContext(AppContext);
     const { isLoading, settings, personalItems } = state;
-    const { todaysHabits, openTasks } = useTodayItems();
     const { contextMenu, handleContextMenu, closeContextMenu } = useContextMenu<PersonalItem>();
     const { triggerHaptic } = useHaptics();
     
@@ -89,23 +115,91 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         handleStartFocus,
     } = useHomeInteraction(showStatus);
 
-    const [layout, setLayout] = useState<HomeScreenComponent[]>(settings.homeScreenLayout);
-    const [focusMode, setFocusMode] = useState(false);
-    const [collapsedSections, setCollapsedSections] = useState<Array<HomeScreenComponentId | 'completed'>>(['completed']);
+    const [view, setView] = useState<ViewMode>('today');
+    
+    const { tasks, habits } = useMemo(() => {
+        const allHabits = personalItems.filter(item => item.type === 'habit');
+        const sortedAllHabits = allHabits.sort((a, b) => (a.order ?? new Date(a.createdAt).getTime()) - (b.order ?? new Date(b.createdAt).getTime()));
 
+        const openTasks = personalItems.filter(item => item.type === 'task' && !item.isCompleted);
+        
+        let filteredTasks: PersonalItem[];
+        
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const parseDate = (dateStr: string) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        };
+
+        if (view === 'today') {
+            const tomorrowEnd = new Date();
+            tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+            tomorrowEnd.setHours(23, 59, 59, 999);
+
+            // Overdue, today's, tomorrow's and undated tasks
+            const dated = openTasks.filter(item => {
+                if (!item.dueDate) return false;
+                const dueDate = parseDate(item.dueDate);
+                // Set to end of day for consistent comparison
+                dueDate.setHours(23, 59, 59, 999);
+                return dueDate <= tomorrowEnd;
+            });
+            const undated = openTasks.filter(item => !item.dueDate);
+            filteredTasks = [...dated, ...undated];
+        } else if (view === 'tomorrow') {
+            const tomorrowStart = new Date(todayStart);
+            tomorrowStart.setDate(todayStart.getDate() + 1);
+            const tomorrowEnd = new Date(tomorrowStart);
+            tomorrowEnd.setHours(23, 59, 59, 999);
+            
+            filteredTasks = openTasks.filter(item => {
+                if (!item.dueDate) return false;
+                const dueDate = parseDate(item.dueDate);
+                return dueDate >= tomorrowStart && dueDate <= tomorrowEnd;
+            });
+        } else { // 'week'
+            const weekEnd = new Date(todayStart);
+            weekEnd.setDate(todayStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+            
+            filteredTasks = openTasks.filter(item => {
+                if (!item.dueDate) return false;
+                const dueDate = parseDate(item.dueDate);
+                return dueDate >= todayStart && dueDate <= weekEnd;
+            });
+        }
+
+        const sortedTasks = filteredTasks.sort((a, b) => {
+            if (!a.dueDate && b.dueDate) return 1;
+            if (a.dueDate && !b.dueDate) return -1;
+            if (!a.dueDate && !b.dueDate) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+            const dateA = parseDate(a.dueDate!).getTime();
+            const dateB = parseDate(b.dueDate!).getTime();
+            if (dateA !== dateB) return dateA - dateB;
+
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            return (priorityOrder[a.priority || 'medium']) - (priorityOrder[b.priority || 'medium']);
+        });
+
+        return { 
+            tasks: sortedTasks,
+            habits: sortedAllHabits,
+        };
+    }, [personalItems, view]);
+
+
+    const [focusMode, setFocusMode] = useState(false);
+    const [collapsedSections, setCollapsedSections] = useState<Array<string>>(['fixed_habits']);
     const [isBriefingLoading, setIsBriefingLoading] = useState(false);
     const [briefingContent, setBriefingContent] = useState('');
     const headerRef = useRef<HTMLElement>(null);
+    
+    const tasksReordering = useItemReordering(tasks, handleUpdateItem, 'createdAt');
+    const habitsReordering = useItemReordering(habits, handleUpdateItem, 'order');
 
-    // State for SECTION dragging
-    const dragItem = useRef<number | null>(null);
-    const dragOverItem = useRef<number | null>(null);
-    const [dragging, setDragging] = useState(false);
-
-    // State for TASK dragging
-    const dragTask = useRef<PersonalItem | null>(null);
-    const dragOverTask = useRef<PersonalItem | null>(null);
-    const [draggingTask, setDraggingTask] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -121,35 +215,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const handleDrop = () => {
-        if (dragItem.current !== null && dragOverItem.current !== null) {
-            const newLayout = [...layout];
-            const dragItemContent = newLayout[dragItem.current];
-            newLayout.splice(dragItem.current, 1);
-            newLayout.splice(dragOverItem.current, 0, dragItemContent);
-            setLayout(newLayout);
-            const newSettings = { ...settings, homeScreenLayout: newLayout };
-            saveSettings(newSettings);
-            dispatch({ type: 'SET_SETTINGS', payload: newSettings });
-        }
-        dragItem.current = null;
-        dragOverItem.current = null;
-        setDragging(false);
-    };
 
-    const handleToggleCollapse = (id: HomeScreenComponentId | 'completed') => {
+    const handleToggleCollapse = (id: string) => {
         setCollapsedSections(prev => 
             prev.includes(id) ? prev.filter(sectionId => sectionId !== id) : [...prev, id]
         );
     };
 
     const handleStartGlobalFocus = useCallback(() => {
-        if (openTasks.length > 0) {
-            handleStartFocus(openTasks[0]);
+        if (tasks.length > 0) {
+            handleStartFocus(tasks[0]);
         } else {
             showStatus('success', 'אין משימות פתוחות להתמקד בהן.');
         }
-    }, [openTasks, handleStartFocus, showStatus]);
+    }, [tasks, handleStartFocus, showStatus]);
 
     const handleGetBriefing = async () => {
         if (isBriefingLoading) return;
@@ -157,7 +236,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         setBriefingContent('');
         try {
             const gratitudeItem = personalItems.find(item => item.type === 'gratitude' && new Date(item.createdAt).toDateString() === new Date().toDateString());
-            const briefing = await generateDailyBriefing(openTasks.slice(0,3), todaysHabits, gratitudeItem?.content || null, settings.aiPersonality);
+            const habitsForBriefing = personalItems.filter(item => item.type === 'habit' && isHabitForToday(item));
+            const briefing = await generateDailyBriefing(tasks.slice(0,3), habitsForBriefing, gratitudeItem?.content || null, settings.aiPersonality);
             setBriefingContent(briefing);
         } catch (error) {
             console.error(error);
@@ -178,106 +258,36 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
             showStatus('success', 'אין משימות לגלגל.');
         }
     };
-    
-    const handleTaskDrop = () => {
-        if (!dragTask.current || !dragOverTask.current || dragTask.current.id === dragOverTask.current.id) {
-            setDraggingTask(false);
-            return;
-        }
-    
-        const tasks = openTasks;
-        const dragItemIndex = tasks.findIndex(i => i.id === dragTask.current!.id);
-        const dragOverItemIndex = tasks.findIndex(i => i.id === dragOverTask.current!.id);
-    
-        if (dragItemIndex === -1 || dragOverItemIndex === -1) return;
-    
-        let newCreatedAt: string;
-    
-        if (dragItemIndex > dragOverItemIndex) { // Moving UP
-            const prevItem = tasks[dragOverItemIndex - 1];
-            const nextItem = tasks[dragOverItemIndex];
-            const nextItemTime = new Date(nextItem.createdAt).getTime();
-            if (prevItem) {
-                const prevItemTime = new Date(prevItem.createdAt).getTime();
-                newCreatedAt = new Date((prevItemTime + nextItemTime) / 2).toISOString();
-            } else {
-                newCreatedAt = new Date(nextItemTime + 1000).toISOString();
-            }
-        } else { // Moving DOWN
-            const prevItem = tasks[dragOverItemIndex];
-            const nextItem = tasks[dragOverItemIndex + 1];
-            const prevItemTime = new Date(prevItem.createdAt).getTime();
-            if (nextItem) {
-                const nextItemTime = new Date(nextItem.createdAt).getTime();
-                newCreatedAt = new Date((prevItemTime + nextItemTime) / 2).toISOString();
-            } else {
-                newCreatedAt = new Date(prevItemTime - 1000).toISOString();
-            }
-        }
-    
-        handleUpdateItem(dragTask.current.id, { createdAt: newCreatedAt });
-    
-        setDraggingTask(false);
-        dragTask.current = null;
-        dragOverTask.current = null;
-    };
 
-    const { completionPercentage, overdueTasksCount, completedTodayTasks } = useMemo(() => {
-        const allHabits = personalItems.filter(i => i.type === 'habit');
-        const habitsCompletedToday = allHabits.filter(h => h.lastCompleted && new Date(h.lastCompleted).toDateString() === new Date().toDateString()).length;
+    const { completionPercentage, overdueTasksCount } = useMemo(() => {
+        const totalHabits = personalItems.filter(i => i.type === 'habit').length;
+        const uncompletedHabitsToday = personalItems.filter(i => i.type === 'habit' && isHabitForToday(i)).length;
+        const habitsCompletedToday = totalHabits - uncompletedHabitsToday;
         
-        const allTasks = personalItems.filter(i => i.type === 'task');
-        const tasksCompleted = allTasks.filter(t => t.isCompleted).length;
-        
-        const totalItems = allHabits.length + allTasks.length;
+        const openTasks = personalItems.filter(i => i.type === 'task' && !i.isCompleted);
+        const totalTasks = personalItems.filter(i => i.type === 'task').length;
+        const tasksCompleted = totalTasks - openTasks.length;
+
+        const totalTrackedItems = totalHabits + totalTasks;
         const totalCompleted = habitsCompletedToday + tasksCompleted;
-        const percentage = totalItems > 0 ? (totalCompleted / totalItems) * 100 : 0;
+        const percentage = totalTrackedItems > 0 ? (totalCompleted / totalTrackedItems) * 100 : 0;
         
         const today = new Date();
         today.setHours(0,0,0,0);
-        const overdue = allTasks.filter(t => !t.isCompleted && t.dueDate && new Date(t.dueDate) < today).length;
+        const overdue = openTasks.filter(t => t.dueDate && new Date(t.dueDate) < today).length;
 
-        const completedToday = allTasks.filter(t => t.isCompleted && t.lastCompleted && new Date(t.lastCompleted).toDateString() === today.toDateString());
-
-        return { completionPercentage: percentage, overdueTasksCount: overdue, completedTodayTasks: completedToday };
+        return { completionPercentage: percentage, overdueTasksCount: overdue };
     }, [personalItems]);
     
     const todayDate = new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
 
-    const componentsMap: Record<HomeScreenComponentId, React.ReactNode> = {
-        gratitude: <GratitudeTracker />,
-        habits: todaysHabits.map((item, index) => <HabitItem key={item.id} index={index} item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} onContextMenu={handleContextMenu} />),
-        tasks: (
-            <>
-                {openTasks.map((item, index) => (
-                    <div
-                        key={item.id}
-                        draggable
-                        onDragStart={() => { dragTask.current = item; setDraggingTask(true); }}
-                        onDragEnter={() => { dragOverTask.current = item; }}
-                        onDragEnd={handleTaskDrop}
-                        onDragOver={(e) => e.preventDefault()}
-                        className={`transition-opacity duration-300 ${draggingTask && dragTask.current?.id === item.id ? 'dragging-item' : ''} cursor-grab`}
-                    >
-                        <TaskItem 
-                            item={item} 
-                            onUpdate={handleUpdateItem} 
-                            onDelete={handleDeleteItem} 
-                            onSelect={handleSelectItem} 
-                            onContextMenu={handleContextMenu}
-                            onStartFocus={handleStartFocus}
-                            index={index} 
-                        />
-                    </div>
-                ))}
-            </>
-        ),
-    };
-
-    const componentMeta: Record<HomeScreenComponentId, { title: string; count: number; isCollapsible: boolean; isNonEssential?: boolean }> = {
-        gratitude: { title: settings.sectionLabels.gratitude, count: 1, isCollapsible: true, isNonEssential: true },
-        habits: { title: "הרגלים", count: todaysHabits.length, isCollapsible: true },
-        tasks: { title: "משימות להיום", count: openTasks.length, isCollapsible: true },
+    const getSectionTitle = () => {
+        switch (view) {
+            case 'today': return 'משימות להיום';
+            case 'tomorrow': return 'משימות למחר';
+            case 'week': return 'משימות לשבוע';
+            default: return 'משימות';
+        }
     };
 
     return (
@@ -308,81 +318,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
                 </div>
             </header>
             
-            <QuickAddTask onItemAdded={(message) => showStatus('success', message)} />
+            <div className="animate-screen-enter px-4">
+                 <ViewSwitcher currentView={view} onViewChange={setView} />
+            </div>
 
-            {isLoading ? <SkeletonLoader count={5} /> : (
-                <>
-                    {layout.map((component, index) => {
-                        if (!component.isVisible) return null;
-                        const meta = componentMeta[component.id];
-                        return (
-                            <div
-                                key={component.id}
-                                className={`transition-all duration-300 ${dragging && dragItem.current === index ? 'dragging-item' : ''}`}
-                            >
-                                <div className="flex items-start gap-2">
-                                    <button 
-                                        draggable
-                                        onDragStart={() => { dragItem.current = index; setDragging(true); }}
-                                        onDragEnter={() => dragOverItem.current = index}
-                                        onDragEnd={handleDrop}
-                                        onDragOver={(e) => e.preventDefault()}
-                                        className="pt-2 cursor-grab text-[var(--text-secondary)]/50 hover:text-white"
-                                        aria-label={`גרור כדי לסדר מחדש את אזור ${meta.title}`}
-                                    >
-                                        <DragHandleIcon className="w-5 h-5"/>
-                                    </button>
-                                    <div className="flex-1">
-                                        <Section
-                                            componentId={component.id}
-                                            title={meta.title}
-                                            count={meta.count}
-                                            isCollapsible={meta.isCollapsible}
-                                            isExpanded={!collapsedSections.includes(component.id)}
-                                            onToggle={() => handleToggleCollapse(component.id)}
-                                            className={meta.isNonEssential ? 'non-essential-section' : ''}
-                                        >
-                                            {componentsMap[component.id]}
-                                        </Section>
-                                        
-                                        {component.id === 'tasks' && openTasks.length === 0 && !collapsedSections.includes('tasks') && <p className="text-center text-sm text-[var(--text-secondary)] py-4">אין משימות להיום. כל הכבוד!</p>}
-                                        
-                                        {component.id === 'tasks' && overdueTasksCount > 0 && !collapsedSections.includes('tasks') && (
-                                            <button onClick={handleRollOverTasks} className="mt-4 text-sm w-full flex items-center justify-center gap-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent-start)] text-[var(--accent-highlight)] font-semibold py-2 px-4 rounded-xl transition-colors">
-                                                <CheckSquareIcon className="w-5 h-5"/>
-                                                גלגל {overdueTasksCount} משימות שעבר זמנן
-                                            </button>
-                                        )}
-                                    </div>
+            <div className="animate-screen-enter">
+                <QuickAddTask onItemAdded={(message) => showStatus('success', message)} />
+                <div className="mt-8 space-y-8">
+                    {isLoading ? <SkeletonLoader count={5} /> : (
+                        <>
+                            <Section componentId="tasks" title={getSectionTitle()} count={tasks.length} isCollapsible={true} isExpanded={!collapsedSections.includes('tasks')} onToggle={() => handleToggleCollapse('tasks')} className="pl-8">
+                                <div onDrop={tasksReordering.handleDrop}>
+                                    {tasks.map((item, index) => <div key={item.id} draggable onDragStart={(e) => tasksReordering.handleDragStart(e, item)} onDragEnter={(e) => tasksReordering.handleDragEnter(e, item)} onDragEnd={tasksReordering.handleDragEnd} onDragOver={(e) => e.preventDefault()} className={`transition-opacity duration-300 ${tasksReordering.draggingItem?.id === item.id ? 'dragging-item' : ''} cursor-grab`}><TaskItem item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} onContextMenu={handleContextMenu} onStartFocus={handleStartFocus} index={index}/></div>)}
                                 </div>
-                            </div>
-                        )
-                    })}
-                     {/* Completed Tasks Section */}
-                    <Section
-                        componentId="completed"
-                        title="הושלמו היום"
-                        count={completedTodayTasks.length}
-                        isCollapsible={true}
-                        isExpanded={!collapsedSections.includes('completed')}
-                        onToggle={() => handleToggleCollapse('completed')}
-                        className="pl-8"
-                    >
-                        {completedTodayTasks.map((item, index) => (
-                             <TaskItem 
-                                key={item.id}
-                                item={item} 
-                                onUpdate={handleUpdateItem} 
-                                onDelete={handleDeleteItem} 
-                                onSelect={handleSelectItem} 
-                                onContextMenu={handleContextMenu}
-                                onStartFocus={handleStartFocus}
-                                index={index} 
-                            />
-                        ))}
-                    </Section>
-                </>
-            )}
+                                {tasks.length === 0 && !collapsedSections.includes('tasks') && <p className="text-center text-sm text-[var(--text-secondary)] py-4">אין משימות לתצוגה זו.</p>}
+                                {view === 'today' && overdueTasksCount > 0 && !collapsedSections.includes('tasks') && (<button onClick={handleRollOverTasks} className="mt-4 text-sm w-full flex items-center justify-center gap-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent-start)] text-[var(--accent-highlight)] font-semibold py-2 px-4 rounded-xl transition-colors"><CheckSquareIcon className="w-5 h-5"/> גלגל {overdueTasksCount} משימות שעבר זמנן</button>)}
+                            </Section>
+
+                            <Section componentId="fixed_habits" title="הרגלים קבועים" count={habits.length} isCollapsible={true} isExpanded={!collapsedSections.includes('fixed_habits')} onToggle={() => handleToggleCollapse('fixed_habits')} className="pl-8 non-essential-section">
+                                <div onDrop={habitsReordering.handleDrop}>
+                                    {habits.map((item, index) => <div key={item.id} draggable onDragStart={(e) => habitsReordering.handleDragStart(e, item)} onDragEnter={(e) => habitsReordering.handleDragEnter(e, item)} onDragEnd={habitsReordering.handleDragEnd} onDragOver={(e) => e.preventDefault()} className={`transition-opacity duration-300 ${habitsReordering.draggingItem?.id === item.id ? 'dragging-item' : ''} cursor-grab`}><HabitItem item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onSelect={handleSelectItem} onContextMenu={handleContextMenu} index={index}/></div>)}
+                                </div>
+                            </Section>
+                        </>
+                    )}
+                </div>
+            </div>
+
             {selectedItem && <PersonalItemDetailModal item={selectedItem} onClose={handleCloseModal} onUpdate={handleUpdateItem} onDelete={handleDeleteWithConfirmation} />}
             {contextMenu.isOpen && contextMenu.item && <PersonalItemContextMenu x={contextMenu.x} y={contextMenu.y} item={contextMenu.item} onClose={closeContextMenu} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onDuplicate={handleDuplicateItem} onStartFocus={handleStartFocus} />}
             {(isBriefingLoading || briefingContent) && <DailyBriefingModal isLoading={isBriefingLoading} briefingContent={briefingContent} onClose={() => setBriefingContent('')} />}

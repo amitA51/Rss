@@ -1,14 +1,14 @@
 import { LOCAL_STORAGE_KEYS as LS } from '../constants';
 import { defaultFeedItems, defaultPersonalItems, defaultRssFeeds, defaultTags, defaultTemplates, defaultSpaces, defaultMentors } from './mockData';
-import type { FeedItem, PersonalItem, RssFeed, Tag, AppData, ExportData, Template, WatchlistItem, Space, Mentor } from '../types';
+import type { FeedItem, PersonalItem, RssFeed, Tag, AppData, ExportData, Template, WatchlistItem, Space, Mentor, AiFeedSettings } from '../types';
 import { loadSettings, saveSettings } from './settingsService';
 import { fetchAndParseFeed } from './rssService';
 import { fetchNewsForTicker, findTicker } from './financialsService';
-import { generateMentorContent } from './geminiService';
+import { generateMentorContent, generateAiFeedItems } from './geminiService';
 
 // --- IndexedDB Wrapper (Principle 1: Offline First) ---
 const DB_NAME = 'SparkDB';
-const DB_VERSION = 2; // Incremented version to add new stores if needed
+const DB_VERSION = 3; // Incremented version to add auth token store
 const OBJECT_STORES = Object.values(LS);
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -28,12 +28,16 @@ const initDB = (): Promise<IDBDatabase> => {
             const db = (event.target as IDBOpenDBRequest).result;
             OBJECT_STORES.forEach(storeName => {
                 if (!db.objectStoreNames.contains(storeName)) {
-                    // keyPath is 'id' for collections, undefined for single-doc stores
-                    const hasIdKey = storeName !== LS.SETTINGS;
-                    const keyPathOption = hasIdKey ? { keyPath: 'id' } : {};
-                    db.createObjectStore(storeName, keyPathOption);
+                    // keyPath is 'id' for collections, 'service' for auth tokens
+                    const keyPath = storeName === LS.AUTH_TOKENS ? 'service' : 'id';
+                    db.createObjectStore(storeName, { keyPath });
                 }
             });
+             if (event.oldVersion < 3) {
+                if (!db.objectStoreNames.contains(LS.AUTH_TOKENS)) {
+                    db.createObjectStore(LS.AUTH_TOKENS, { keyPath: 'service' });
+                }
+            }
         };
 
         request.onsuccess = () => {
@@ -48,8 +52,6 @@ const getStore = async (storeName: string, mode: IDBTransactionMode) => {
     return db.transaction(storeName, mode).objectStore(storeName);
 };
 
-// FIX: Correctly typed the IDBRequest to ensure type safety for the result.
-// This resolves errors where getAll() was effectively returning `unknown[]`.
 const dbGetAll = async <T>(storeName: string): Promise<T[]> => {
     const store = await getStore(storeName, 'readonly');
     return new Promise((resolve, reject) => {
@@ -103,10 +105,8 @@ const initializeDefaultData = async <T>(storeName: string, defaultData: T[]): Pr
         const store = await getStore(storeName, 'readwrite');
         const transaction = store.transaction;
         
-        // Queue all put operations within the same transaction
         defaultData.forEach(item => store.put(item));
 
-        // Wait for the transaction to complete to ensure all data is written
         return new Promise((resolve, reject) => {
             transaction.oncomplete = () => resolve(defaultData);
             transaction.onerror = () => reject(transaction.error);
@@ -124,6 +124,11 @@ const safeDateSort = (a: { createdAt: string }, b: { createdAt: string }): numbe
     if (isNaN(dateA)) return 1;
     return dateB - dateA;
 };
+
+// --- Auth Token Management ---
+export const saveToken = (service: string, token: any): Promise<void> => dbPut(LS.AUTH_TOKENS, { service, ...token });
+export const getToken = (service: string): Promise<any> => dbGet(LS.AUTH_TOKENS, service);
+export const removeToken = (service: string): Promise<void> => dbDelete(LS.AUTH_TOKENS, service);
 
 
 // --- Feed Item CRUD ---
@@ -174,6 +179,7 @@ export const addPersonalItem = async (itemData: Omit<PersonalItem, 'id' | 'creat
     const newItem: PersonalItem = {
         id: `p-${Date.now()}`,
         createdAt: new Date().toISOString(),
+        order: Date.now(),
         ...itemData,
     };
     await dbPut(LS.PERSONAL_ITEMS, newItem);
@@ -239,6 +245,38 @@ export const rollOverIncompleteTasks = async (): Promise<{ id: string, updates: 
     return updates;
 };
 
+export const cleanupCompletedTasks = async (): Promise<string[]> => {
+    const allItems = await getPersonalItems();
+    const now = new Date();
+    const deletedIds: string[] = [];
+
+    const tasksToDelete = allItems.filter(item => {
+        if (item.type !== 'task' || !item.isCompleted || !item.autoDeleteAfter || item.autoDeleteAfter <= 0) {
+            return false;
+        }
+        if (!item.lastCompleted) {
+            return false;
+        }
+
+        const completedDate = new Date(item.lastCompleted);
+        const timeDiff = now.getTime() - completedDate.getTime();
+        const daysDiff = timeDiff / (1000 * 3600 * 24);
+
+        return daysDiff > item.autoDeleteAfter;
+    });
+
+    if (tasksToDelete.length > 0) {
+        const deletePromises = tasksToDelete.map(item => {
+            deletedIds.push(item.id);
+            return dbDelete(LS.PERSONAL_ITEMS, item.id);
+        });
+        await Promise.all(deletePromises);
+    }
+
+    return deletedIds;
+};
+
+
 // --- Tags, Feeds, Spaces, and Templates Management ---
 export const getTags = (): Promise<Tag[]> => initializeDefaultData(LS.TAGS, defaultTags);
 export const getFeeds = (): Promise<RssFeed[]> => initializeDefaultData(LS.RSS_FEEDS, defaultRssFeeds);
@@ -295,7 +333,6 @@ export const updateSpace = async (id: string, updates: Partial<Space>): Promise<
 export const removeSpace = async (id: string): Promise<void> => {
     await dbDelete(LS.SPACES, id);
     
-    // Update personal items associated with the space
     const personalItems = await getPersonalItems();
     const personalItemsToUpdate = personalItems
         .filter(item => item.spaceId === id)
@@ -305,7 +342,6 @@ export const removeSpace = async (id: string): Promise<void> => {
         await Promise.all(personalItemsToUpdate.map(item => dbPut(LS.PERSONAL_ITEMS, item)));
     }
 
-    // Update feeds associated with the space
     const feeds = await getFeeds();
     const feedsToUpdate = feeds
         .filter(feed => feed.spaceId === id)
@@ -327,182 +363,278 @@ export const addToWatchlist = async (ticker: string): Promise<WatchlistItem> => 
     const watchlist = await getWatchlist();
     const upperTicker = ticker.toUpperCase();
     if (watchlist.some(item => item.ticker === upperTicker)) throw new Error(`${upperTicker} is already in the watchlist.`);
-    const assetInfo = await findTicker(upperTicker);
-    if (!assetInfo) throw new Error(`Could not find information for ticker ${upperTicker}.`);
-    const newItem: WatchlistItem = { id: assetInfo.id, name: assetInfo.name, ticker: upperTicker, type: assetInfo.type };
-    await dbPut(LS.WATCHLIST, newItem);
-    return newItem;
+    const assetInfo = await findTicker(ticker);
+    if (!assetInfo) throw new Error(`Could not find information for ticker: ${upperTicker}`);
+
+    const newWatchlistItem: WatchlistItem = {
+        id: assetInfo.id,
+        name: assetInfo.name,
+        ticker: upperTicker,
+        type: assetInfo.type,
+    };
+    await dbPut(LS.WATCHLIST, newWatchlistItem);
+    return newWatchlistItem;
 };
 
-export const removeFromWatchlist = (ticker: string): Promise<void> => dbDelete(LS.WATCHLIST, ticker);
-
-// --- Mentor Content ---
-export const getCustomMentors = (): Promise<Mentor[]> => initializeDefaultData(LS.CUSTOM_MENTORS, []);
-export const reAddCustomMentor = (item: Mentor): Promise<void> => dbPut(LS.CUSTOM_MENTORS, item);
-
-export const getMentors = async (): Promise<Mentor[]> => {
-    const customMentors = await getCustomMentors();
-    return [...defaultMentors, ...customMentors];
+export const removeFromWatchlist = async (ticker: string): Promise<void> => {
+    const watchlist = await getWatchlist();
+    const itemToRemove = watchlist.find(item => item.ticker === ticker);
+    if (!itemToRemove) return;
+    await dbDelete(LS.WATCHLIST, itemToRemove.id);
 };
 
-export const addCustomMentor = async (name: string): Promise<Mentor> => {
-    const allMentors = await getMentors();
-    if (allMentors.some(m => m.name.toLowerCase() === name.toLowerCase())) throw new Error("מנטור בשם זה כבר קיים.");
-    const quotes = await generateMentorContent(name);
-    if (!quotes || quotes.length === 0) throw new Error("לא הצלחתי ליצור תוכן עבור המנטור הזה.");
-    const newMentor: Mentor = { id: `custom-${Date.now()}`, name, description: 'מנטור מותאם אישית', isCustom: true, quotes };
-    await dbPut(LS.CUSTOM_MENTORS, newMentor);
-    return newMentor;
-};
-
-export const removeCustomMentor = async (id: string): Promise<void> => {
-    await dbDelete(LS.CUSTOM_MENTORS, id);
-    const settings = loadSettings();
-    if (settings.enabledMentorIds.includes(id)) {
-        saveSettings({ ...settings, enabledMentorIds: settings.enabledMentorIds.filter(mentorId => mentorId !== id) });
-    }
-};
-
-export const refreshMentorContent = async (id: string): Promise<Mentor> => {
-    const mentorToUpdate = await dbGet<Mentor>(LS.CUSTOM_MENTORS, id);
-    if (!mentorToUpdate) throw new Error("Mentor not found.");
-    const newQuotes = await generateMentorContent(mentorToUpdate.name);
-    const updatedMentor = { ...mentorToUpdate, quotes: newQuotes };
-    await dbPut(LS.CUSTOM_MENTORS, updatedMentor);
-    return updatedMentor;
-};
-
-const getDayOfYear = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const diff = now.getTime() - start.getTime();
-    const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
-};
-
-export const syncMentorFeeds = async (): Promise<FeedItem[]> => {
-    const settings = loadSettings();
-    if (!settings.enabledMentorIds || settings.enabledMentorIds.length === 0) return [];
-    
-    const today = new Date().toDateString();
-    const [allFeedItems, allMentors] = await Promise.all([getFeedItems(), getMentors()]);
-    const newMentorItems: FeedItem[] = [];
-    const dayOfYear = getDayOfYear();
-
-    for (const mentorId of settings.enabledMentorIds) {
-        const mentor = allMentors.find(m => m.id === mentorId);
-        if (!mentor || !mentor.quotes || mentor.quotes.length === 0) continue;
-        const alreadyExists = allFeedItems.some(item => 
-            item.type === 'mentor' && item.source === `mentor:${mentorId}` && new Date(item.createdAt).toDateString() === today);
-        if (!alreadyExists) {
-            const quote = mentor.quotes[dayOfYear % mentor.quotes.length];
-            newMentorItems.push({
-                id: `mentor-item-${mentorId}-${today}`, type: 'mentor', title: `תובנה מאת ${mentor.name}`,
-                content: quote, is_read: false, is_spark: false, tags: [], createdAt: new Date().toISOString(), source: `mentor:${mentorId}`,
-            });
+// --- Data Transformation & Refresh ---
+export const convertFeedItemToPersonalItem = async (item: FeedItem): Promise<PersonalItem> => {
+    const newItemData: Omit<PersonalItem, 'id' | 'createdAt'> = {
+        type: 'learning',
+        title: item.title,
+        content: item.summary_ai || item.content,
+        url: item.link,
+        domain: item.link ? new URL(item.link).hostname : undefined,
+        metadata: {
+            source: `Feed: ${item.source || 'Unknown'}`,
         }
-    }
-    return newMentorItems;
+    };
+    const newPersonalItem = await addPersonalItem(newItemData);
+    return newPersonalItem;
 };
 
-// --- Bulk Operations ---
+const generateFeedItemId = (feedItem: { guid: string; link?: string; title: string }): string => {
+    const content = feedItem.guid || feedItem.link || feedItem.title;
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+        const char = content.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+    }
+    return `feed-${Math.abs(hash).toString(16)}`;
+};
+
 export const refreshAllFeeds = async (): Promise<FeedItem[]> => {
-    const allItems = await getFeedItems();
-    const existingLinks = new Set(allItems.map(item => item.link).filter(Boolean));
+    const settings = loadSettings();
+    const allFeeds = await getFeeds();
+    const existingItems = await getFeedItems();
+    const existingItemIds = new Set(existingItems.map(item => item.id));
     let newItems: FeedItem[] = [];
 
-    const newMentorItems = await syncMentorFeeds();
-    newItems.push(...newMentorItems.filter(item => !existingLinks.has(item.link!)));
+    // 1. Generate AI Feed Items if enabled
+    if (settings.aiFeedSettings.isEnabled && settings.aiFeedSettings.itemsPerRefresh > 0) {
+        try {
+            const existingTitles = existingItems.map(item => item.title);
+            const generatedData = await generateAiFeedItems(settings.aiFeedSettings, existingTitles);
+            
+            const aiItems: FeedItem[] = generatedData.map((itemData, index) => ({
+                id: `ai-${Date.now()}-${index}`,
+                type: 'spark',
+                title: itemData.title,
+                content: itemData.summary_he,
+                summary_ai: itemData.summary_he,
+                insights: itemData.insights,
+                topics: itemData.topics,
+                tags: itemData.tags.map(t => ({ id: t, name: t })),
+                level: itemData.level,
+                estimated_read_time_min: itemData.estimated_read_time_min,
+                digest: itemData.digest,
+                is_read: false,
+                is_spark: true,
+                createdAt: new Date().toISOString(),
+                source: "AI_GENERATED",
+                source_trust_score: 95,
+            }));
 
-    const allRssFeeds = await getFeeds();
-    const rssResults = await Promise.allSettled(allRssFeeds.map(feed => fetchAndParseFeed(feed.url)));
-    
-    rssResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-            result.value.items.forEach(parsedItem => {
-                if (parsedItem.link && !existingLinks.has(parsedItem.link)) {
+            newItems.push(...aiItems);
+            aiItems.forEach(item => existingItemIds.add(item.id));
+
+        } catch (error) {
+            console.error("Failed to generate AI feed items:", error);
+        }
+    }
+
+
+    // 2. Refresh RSS Feeds
+    for (const feed of allFeeds) {
+        try {
+            const parsedFeed = await fetchAndParseFeed(feed.url);
+            for (const item of parsedFeed.items.slice(0, 10)) {
+                const newItemId = generateFeedItemId(item);
+                if (!existingItemIds.has(newItemId)) {
                     newItems.push({
-                        id: `rss-item-${Date.now()}-${Math.random()}`, type: 'rss', title: parsedItem.title, link: parsedItem.link,
-                        content: parsedItem.content, is_read: false, is_spark: false, tags: [],
-                        createdAt: new Date(parsedItem.pubDate).toISOString(), source: allRssFeeds[index].id,
+                        id: newItemId,
+                        type: 'rss',
+                        title: item.title,
+                        link: item.link,
+                        content: item.content,
+                        is_read: false,
+                        is_spark: false,
+                        tags: [],
+                        createdAt: new Date(item.pubDate).toISOString(),
+                        source: feed.id,
                     });
-                    existingLinks.add(parsedItem.link!);
+                    existingItemIds.add(newItemId);
                 }
-            });
+            }
+        } catch (error) {
+            console.error(`Failed to refresh feed ${feed.name}:`, error);
         }
-    });
+    }
 
+    // 3. Refresh Mentor Feeds
+    const allMentors = await getMentors();
+    const enabledMentors = allMentors.filter(m => settings.enabledMentorIds.includes(m.id));
+    for (const mentor of enabledMentors) {
+        if (mentor.quotes && mentor.quotes.length > 0) {
+            const today = new Date().toDateString();
+            const hasPostedToday = existingItems.some(item =>
+                item.source === `mentor:${mentor.id}` && new Date(item.createdAt).toDateString() === today
+            );
+            if (!hasPostedToday) {
+                const quote = mentor.quotes[new Date().getDate() % mentor.quotes.length];
+                const newItem: FeedItem = {
+                    id: `mentor-${mentor.id}-${new Date().toISOString().split('T')[0]}`,
+                    type: 'mentor',
+                    title: `ציטוט מאת ${mentor.name}`,
+                    content: quote,
+                    is_read: false, is_spark: false, tags: [],
+                    createdAt: new Date().toISOString(),
+                    source: `mentor:${mentor.id}`,
+                };
+                if (!existingItemIds.has(newItem.id)) newItems.push(newItem);
+            }
+        }
+    }
+
+    // 4. Refresh Financial News
     const watchlist = await getWatchlist();
-    const newsResults = await Promise.allSettled(watchlist.map(item => fetchNewsForTicker(item.ticker, item.type)));
-
-    newsResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-            result.value.forEach(newsItem => {
-                 if (newsItem.url && !existingLinks.has(newsItem.url)) {
+    for (const item of watchlist) {
+        try {
+            const newsItems = await fetchNewsForTicker(item.ticker, item.type);
+            for (const news of newsItems) {
+                const newItemId = `news-${news.id}`;
+                if (!existingItemIds.has(newItemId)) {
                     newItems.push({
-                        id: `news-item-${newsItem.id}`, type: 'news', title: newsItem.headline, link: newsItem.url,
-                        content: newsItem.summary, source: watchlist[index].ticker, is_read: false, is_spark: false, tags: [],
-                        createdAt: new Date(newsItem.datetime * 1000).toISOString(),
+                        id: newItemId,
+                        type: 'news',
+                        title: news.headline,
+                        link: news.url,
+                        content: news.summary,
+                        is_read: false, is_spark: false,
+                        tags: [{id: item.ticker, name: item.ticker}],
+                        createdAt: new Date(news.datetime * 1000).toISOString(),
+                        source: item.ticker,
                     });
-                    existingLinks.add(newsItem.url);
-                 }
-            });
+                     existingItemIds.add(newItemId);
+                }
+            }
+        } catch (error) {
+            console.error(`Failed to fetch news for ${item.ticker}:`, error);
         }
-    });
+    }
 
     if (newItems.length > 0) {
         await Promise.all(newItems.map(item => dbPut(LS.FEED_ITEMS, item)));
     }
+
     return newItems;
 };
 
-export const convertFeedItemToPersonalItem = async (feedItem: FeedItem): Promise<PersonalItem> => {
-    const newLearningItem: Omit<PersonalItem, 'id' | 'createdAt'> = {
-        type: 'learning', title: feedItem.title, content: feedItem.summary_ai || feedItem.content,
-        metadata: { status: 'to-learn', source: feedItem.link }
+// --- Mentor Management ---
+export const getMentors = async (): Promise<Mentor[]> => {
+    const customMentors = await initializeDefaultData<Mentor>(LS.CUSTOM_MENTORS, []);
+    return [...defaultMentors, ...customMentors];
+};
+
+export const addCustomMentor = async (name: string): Promise<Mentor> => {
+    const quotes = await generateMentorContent(name);
+    if (quotes.length === 0) throw new Error("Could not generate content for this mentor.");
+    const newMentor: Mentor = {
+        id: `custom-${Date.now()}`,
+        name,
+        description: 'Custom AI-powered mentor',
+        isCustom: true,
+        quotes,
     };
-    return addPersonalItem(newLearningItem);
+    await dbPut(LS.CUSTOM_MENTORS, newMentor);
+    return newMentor;
 };
 
-export const wipeAllData = async (): Promise<void> => {
-    await Promise.all(OBJECT_STORES.map(storeName => dbClear(storeName)));
-    localStorage.removeItem(LS.SETTINGS);
+export const reAddCustomMentor = (mentor: Mentor): Promise<void> => dbPut(LS.CUSTOM_MENTORS, mentor);
+
+export const refreshMentorContent = async (mentorId: string): Promise<Mentor> => {
+    const mentors = await getMentors();
+    const mentor = mentors.find(m => m.id === mentorId);
+    if (!mentor || !mentor.isCustom) throw new Error("Mentor not found or not a custom mentor.");
+    const newQuotes = await generateMentorContent(mentor.name);
+    if (newQuotes.length === 0) throw new Error("Could not refresh content.");
+    const updatedMentor = { ...mentor, quotes: newQuotes };
+    await dbPut(LS.CUSTOM_MENTORS, updatedMentor);
+    return updatedMentor;
 };
 
-// --- Data Import/Export ---
-export const exportAllData = async (): Promise<string> => {
+export const removeCustomMentor = async (mentorId: string): Promise<void> => {
+    await dbDelete(LS.CUSTOM_MENTORS, mentorId);
     const settings = loadSettings();
-    const [tags, rssFeeds, feedItems, personalItems, templates, watchlist, spaces, customMentors] = await Promise.all([
-        getTags(), getFeeds(), getFeedItems(), getPersonalItems(), getTemplates(), getWatchlist(), getSpaces(), getCustomMentors()
-    ]);
-    const data: AppData = { tags, rssFeeds, feedItems, personalItems, templates, watchlist, spaces, customMentors };
-    const exportObject: ExportData = { settings, data, exportDate: new Date().toISOString(), version: 3 };
-    return JSON.stringify(exportObject, null, 2);
+    const newEnabledMentorIds = settings.enabledMentorIds.filter(id => id !== mentorId);
+    saveSettings({ ...settings, enabledMentorIds: newEnabledMentorIds });
+};
+
+// --- Data Management (Export/Import/Wipe) ---
+export const exportAllData = async (): Promise<string> => {
+    const data: AppData = {
+        tags: await dbGetAll(LS.TAGS),
+        rssFeeds: await dbGetAll(LS.RSS_FEEDS),
+        feedItems: await dbGetAll(LS.FEED_ITEMS),
+        personalItems: await dbGetAll(LS.PERSONAL_ITEMS),
+        templates: await dbGetAll(LS.TEMPLATES),
+        watchlist: await dbGetAll(LS.WATCHLIST),
+        spaces: await dbGetAll(LS.SPACES),
+        customMentors: await dbGetAll(LS.CUSTOM_MENTORS),
+    };
+    const exportData: ExportData = {
+        settings: loadSettings(),
+        data: data,
+        exportDate: new Date().toISOString(),
+        version: DB_VERSION,
+    };
+    return JSON.stringify(exportData, null, 2);
 };
 
 export const importAllData = async (jsonData: string): Promise<void> => {
-    const parsedData = JSON.parse(jsonData);
-    if (typeof parsedData !== 'object' || !parsedData.version || parsedData.version > 3) {
-        throw new Error("Invalid or unsupported file format.");
+    const importData: ExportData = JSON.parse(jsonData);
+    if (importData.version > DB_VERSION) {
+        throw new Error("Import file is from a newer version of the app.");
     }
-    const data: AppData = parsedData.data;
-    await wipeAllData(); // Clear existing data without reloading
     
-    saveSettings(parsedData.settings);
+    await wipeAllData(false);
 
-    const promises = [
-        ...data.tags.map((item: Tag) => dbPut(LS.TAGS, item)),
-        ...data.rssFeeds.map((item: RssFeed) => dbPut(LS.RSS_FEEDS, item)),
-        ...data.feedItems.map((item: FeedItem) => dbPut(LS.FEED_ITEMS, item)),
-        ...data.personalItems.map((item: PersonalItem) => dbPut(LS.PERSONAL_ITEMS, item)),
-        ...data.templates.map((item: Template) => dbPut(LS.TEMPLATES, item)),
-        ...data.watchlist.map((item: WatchlistItem) => dbPut(LS.WATCHLIST, item)),
-        ...data.spaces.map((item: Space) => dbPut(LS.SPACES, item)),
+    saveSettings(importData.settings);
+
+    const data = importData.data;
+    const storesToImport = [
+      { name: LS.TAGS, data: data.tags },
+      { name: LS.RSS_FEEDS, data: data.rssFeeds },
+      { name: LS.FEED_ITEMS, data: data.feedItems },
+      { name: LS.PERSONAL_ITEMS, data: data.personalItems },
+      { name: LS.TEMPLATES, data: data.templates },
+      { name: LS.WATCHLIST, data: data.watchlist },
+      { name: LS.SPACES, data: data.spaces },
+      { name: LS.CUSTOM_MENTORS, data: data.customMentors },
     ];
 
-    if (data.customMentors) {
-        promises.push(...data.customMentors.map((item: Mentor) => dbPut(LS.CUSTOM_MENTORS, item)));
+    for (const storeInfo of storesToImport) {
+        if (storeInfo.data && storeInfo.data.length > 0) {
+            await Promise.all(storeInfo.data.map(item => dbPut(storeInfo.name, item)));
+        }
     }
+};
 
-    await Promise.all(promises);
+export const wipeAllData = async (resetSettings = true): Promise<void> => {
+    await Promise.all(OBJECT_STORES.map(storeName => {
+        if (storeName !== LS.AUTH_TOKENS) {
+            return dbClear(storeName);
+        }
+        return Promise.resolve();
+    }));
+    if (resetSettings) {
+        localStorage.removeItem(LS.SETTINGS);
+    }
 };

@@ -1,8 +1,9 @@
-import { useState, useCallback, useContext } from 'react';
+import React, { useState, useCallback, useContext } from 'react';
 import type { PersonalItem } from '../types';
 import { AppContext } from '../state/AppContext';
 import { removePersonalItem, updatePersonalItem, duplicatePersonalItem, reAddPersonalItem } from '../services/dataService';
 import { StatusMessageType } from '../components/StatusMessage';
+import { useModal } from '../state/ModalContext';
 
 export const useHomeInteraction = (
     showStatus: (type: StatusMessageType, text: string, onUndo?: () => void) => void
@@ -10,15 +11,7 @@ export const useHomeInteraction = (
     const { state, dispatch } = useContext(AppContext);
     const { personalItems } = state;
     const [selectedItem, setSelectedItem] = useState<PersonalItem | null>(null);
-
-    const handleSelectItem = useCallback((item: PersonalItem, event: React.MouseEvent | React.KeyboardEvent) => {
-        event.stopPropagation();
-        setSelectedItem(item);
-    }, []);
-    
-    const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
-        setSelectedItem(nextItem || null);
-    }, []);
+    const { openModal } = useModal();
 
     const handleUpdateItem = useCallback(async (id: string, updates: Partial<PersonalItem>) => {
         const originalItem = personalItems.find(item => item.id === id);
@@ -55,6 +48,23 @@ export const useHomeInteraction = (
             dispatch({ type: 'ADD_PERSONAL_ITEM', payload: itemToDelete });
         });
     }, [dispatch, personalItems, showStatus]);
+
+    const handleSelectItem = useCallback((item: PersonalItem, event: React.MouseEvent | React.KeyboardEvent) => {
+        event.stopPropagation();
+        if (item.type === 'roadmap') {
+            openModal('roadmapScreen', { 
+                item,
+                onUpdate: handleUpdateItem,
+                onDelete: handleDeleteItem,
+             });
+            return;
+        }
+        setSelectedItem(item);
+    }, [openModal, handleUpdateItem, handleDeleteItem]);
+    
+    const handleCloseModal = useCallback((nextItem?: PersonalItem) => {
+        setSelectedItem(nextItem || null);
+    }, []);
 
     const handleDeleteWithConfirmation = useCallback((id: string) => {
         const itemToDelete = personalItems.find(item => item.id === id);

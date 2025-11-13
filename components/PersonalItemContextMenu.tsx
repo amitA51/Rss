@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { PersonalItem } from '../types';
-import { StarIcon, TrashIcon, EditIcon, PlayIcon, CopyIcon } from './icons';
+import { StarIcon, TrashIcon, PlayIcon, CopyIcon } from './icons';
 import { useHaptics } from '../hooks/useHaptics';
 
 interface PersonalItemContextMenuProps {

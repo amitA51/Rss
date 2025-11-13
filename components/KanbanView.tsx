@@ -1,4 +1,4 @@
-import React, { useState, useMemo, DragEvent } from 'react';
+import React, { useState, useMemo, DragEvent, useRef } from 'react';
 import type { PersonalItem, PersonalItemType, AddableType } from '../types';
 import PersonalItemCard from './PersonalItemCard';
 import { AddIcon } from './icons';
@@ -30,6 +30,7 @@ const getItemStatus = (item: PersonalItem): Status => {
 const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, onQuickAdd, onDelete }) => {
   const [draggedItem, setDraggedItem] = useState<PersonalItem | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<Status | null>(null);
+  const dragOverItem = useRef<PersonalItem | null>(null);
 
   const itemsByStatus = useMemo(() => {
     const grouped: Record<Status, PersonalItem[]> = { todo: [], doing: [], done: [] };
@@ -62,15 +63,48 @@ const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, 
 
   const handleDrop = (e: DragEvent, targetStatus: Status) => {
     e.preventDefault();
-    if (draggedItem && getItemStatus(draggedItem) !== targetStatus) {
-      const updates: Partial<PersonalItem> = { status: targetStatus };
-      if (['task', 'roadmap'].includes(draggedItem.type)) {
-        updates.isCompleted = targetStatus === 'done';
-      }
-      onUpdate(draggedItem.id, updates);
+    if (!draggedItem) return;
+
+    const sourceStatus = getItemStatus(draggedItem);
+
+    if (sourceStatus !== targetStatus) {
+        // --- Inter-column drop (change status) ---
+        const updates: Partial<PersonalItem> = { status: targetStatus };
+        if (['task', 'roadmap'].includes(draggedItem.type)) {
+            updates.isCompleted = targetStatus === 'done';
+        }
+        onUpdate(draggedItem.id, updates);
+    } else if (dragOverItem.current && draggedItem.id !== dragOverItem.current.id) {
+        // --- Intra-column drop (reorder) ---
+        const columnItems = itemsByStatus[targetStatus];
+        const dragItemIndex = columnItems.findIndex(i => i.id === draggedItem.id);
+        const dragOverItemIndex = columnItems.findIndex(i => i.id === dragOverItem.current?.id);
+
+        if (dragItemIndex === -1 || dragOverItemIndex === -1) return;
+
+        let newCreatedAt: string;
+
+        if (dragItemIndex > dragOverItemIndex) { // Moving UP
+            const prevItem = columnItems[dragOverItemIndex - 1];
+            const nextItem = columnItems[dragOverItemIndex];
+            const nextItemTime = new Date(nextItem.createdAt).getTime();
+            newCreatedAt = prevItem 
+                ? new Date((new Date(prevItem.createdAt).getTime() + nextItemTime) / 2).toISOString()
+                : new Date(nextItemTime + 1000).toISOString();
+        } else { // Moving DOWN
+            const prevItem = columnItems[dragOverItemIndex];
+            const nextItem = columnItems[dragOverItemIndex + 1];
+            const prevItemTime = new Date(prevItem.createdAt).getTime();
+            newCreatedAt = nextItem
+                ? new Date((prevItemTime + new Date(nextItem.createdAt).getTime()) / 2).toISOString()
+                : new Date(prevItemTime - 1000).toISOString();
+        }
+        onUpdate(draggedItem.id, { createdAt: newCreatedAt });
     }
+
     setDraggedItem(null);
     setDragOverColumn(null);
+    dragOverItem.current = null;
   };
   
   const handleQuickAdd = (status: Status) => {
@@ -104,6 +138,8 @@ const KanbanView: React.FC<KanbanViewProps> = ({ items, onUpdate, onSelectItem, 
                 onDelete={onDelete}
                 onContextMenu={() => {}} // Context menu is complex here, disable for now
                 onDragStart={(e, i) => handleDragStart(e, i)}
+                onDragEnter={() => dragOverItem.current = item}
+                onDragEnd={() => dragOverItem.current = null}
                 isDragging={draggedItem?.id === item.id}
                 onLongPress={(_item: PersonalItem) => { /* Not used in Kanban view */ }}
                 isInSelectionMode={false}

@@ -72,6 +72,8 @@ const FilterButton: React.FC<{
   </button>
 );
 
+const LAST_REFRESH_KEY = 'spark_last_refresh_time';
+
 const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
   const { state, dispatch } = useContext(AppContext);
   const { feedItems, spaces, isLoading, settings } = state;
@@ -130,8 +132,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
   };
 
   const handleSelectItem = useCallback((item: FeedItem, event?: React.MouseEvent) => {
+    event?.stopPropagation();
     if (selectionMode) {
-        event?.stopPropagation();
         const newIds = new Set(selectedIds);
         if (newIds.has(item.id)) {
             newIds.delete(item.id);
@@ -143,8 +145,15 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
             setSelectionMode(false);
         }
     } else {
-       event?.stopPropagation();
-       setSelectedItem(item);
+       // @ts-ignore
+      if (!document.startViewTransition) {
+        setSelectedItem(item);
+        return;
+      }
+      // @ts-ignore
+      document.startViewTransition(() => {
+        setSelectedItem(item);
+      });
     }
   }, [selectionMode, selectedIds]);
   
@@ -185,6 +194,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
       dispatch({ type: 'SET_ALL_DATA', payload: { feedItems: allItems, personalItems: allPersonalItems, spaces: allSpaces } });
       
       if (!isAutoRefresh) {
+          localStorage.setItem(LAST_REFRESH_KEY, new Date().getTime().toString());
           if (newItems.length > 0) {
             showStatus('success', `נוספו ${newItems.length} פריטים חדשים.`);
           } else {
@@ -203,11 +213,20 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        handleRefresh(true);
-      }
+        if (document.visibilityState === 'visible') {
+            const lastRefreshTime = localStorage.getItem(LAST_REFRESH_KEY);
+            const now = new Date().getTime();
+            const ONE_HOUR = 60 * 60 * 1000;
+
+            if (!lastRefreshTime || (now - parseInt(lastRefreshTime, 10) > ONE_HOUR)) {
+                handleRefresh(true);
+                localStorage.setItem(LAST_REFRESH_KEY, now.toString());
+            }
+        }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Initial check on mount
+    handleVisibilityChange();
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [handleRefresh]);
   
@@ -243,7 +262,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
 
     showStatus('success', 'הפריט נמחק.', async () => {
         // This is the UNDO action
-        // FIX: Added `await` to the async undo action to ensure it completes before potential subsequent actions.
         await dataService.reAddFeedItem(itemToDelete); // Re-add the item
         dispatch({ type: 'ADD_FEED_ITEM', payload: itemToDelete });
     });
@@ -285,12 +303,28 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
         setSelectedIds(new Set());
     };
 
-    const handleBatchMarkRead = () => {
+    const handleBatchMarkRead = async () => {
         const itemsToUpdate = Array.from(selectedIds).map(id => feedItems.find(item => item.id === id)).filter(Boolean) as FeedItem[];
+        if (itemsToUpdate.length === 0) return;
+        
         // If any selected item is unread, mark all as read. Otherwise, mark all as unread.
         const shouldMarkAsRead = itemsToUpdate.some(item => !item.is_read);
-        itemsToUpdate.forEach(item => handleUpdateItem(item.id, { is_read: shouldMarkAsRead }));
+        const updates = itemsToUpdate.map(item => ({ id: item.id, updates: { is_read: shouldMarkAsRead } }));
+
+        // Optimistic UI update with a single dispatch for performance
+        dispatch({ type: 'BATCH_UPDATE_FEED_ITEMS', payload: updates });
         handleBatchCancel();
+
+        // Asynchronously persist changes
+        try {
+            await Promise.all(updates.map(u => dataService.updateFeedItem(u.id, u.updates)));
+        } catch (error) {
+            console.error("Batch mark read failed:", error);
+            showStatus('error', 'שגיאה בעדכון הפריטים.');
+            // Rollback on failure by reversing the update
+            const rollbackUpdates = itemsToUpdate.map(item => ({ id: item.id, updates: { is_read: item.is_read } }));
+            dispatch({ type: 'BATCH_UPDATE_FEED_ITEMS', payload: rollbackUpdates });
+        }
     };
     
     const handleBatchAddToLibrary = () => {
@@ -385,7 +419,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
       </header>
 
       {/* Fi Principle: Wrapper for Immersive Depth Effect */}
-      <div className={`transition-all duration-500 ${!!selectedItem ? 'receding-background' : ''}`}>
+      <div className={`transition-all duration-500`}>
         {feedViewMode === 'visual' ? (
           <KnowledgeGraph items={feedItems} onSelectItem={handleSelectItem} />
         ) : (
@@ -444,7 +478,17 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ setActiveScreen }) => {
       <ItemDetailModal 
         item={selectedItem}
         onSelectItem={(item) => setSelectedItem(item)}
-        onClose={() => setSelectedItem(null)}
+        onClose={() => {
+            // @ts-ignore
+            if (!document.startViewTransition) {
+                setSelectedItem(null);
+                return;
+            }
+            // @ts-ignore
+            document.startViewTransition(() => {
+                setSelectedItem(null);
+            });
+        }}
         onSummarize={handleSummarize}
         onUpdate={handleUpdateItem}
         onDelete={handleDeleteWithConfirmation}

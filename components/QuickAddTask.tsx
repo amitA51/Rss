@@ -1,7 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { AppContext } from '../state/AppContext';
 import { addPersonalItem } from '../services/dataService';
-import { parseNaturalLanguageTask } from '../services/geminiService';
 import { AddIcon, SparklesIcon, CheckCircleIcon, FlameIcon, CalendarIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -30,32 +29,35 @@ const QuickAddAction: React.FC<{
 const QuickAddTask: React.FC<QuickAddProps> = ({ onItemAdded }) => {
     const { dispatch } = useContext(AppContext);
     const [title, setTitle] = useState('');
-    const [loadingState, setLoadingState] = useState<'task' | 'daily_task' | 'habit' | null>(null);
+    const [loadingState, setLoadingState] = useState<'task_today' | 'task_tomorrow' | 'habit' | null>(null);
 
-    const handleAdd = async (type: 'task' | 'daily_task' | 'habit') => {
+    const handleAdd = async (type: 'task_today' | 'task_tomorrow' | 'habit') => {
         if (!title.trim() || loadingState) return;
 
         setLoadingState(type);
         try {
-            if (type === 'task') {
-                const parsedData = await parseNaturalLanguageTask(title.trim());
-                const newItem = await addPersonalItem({
-                    type: 'task',
-                    title: parsedData.title,
-                    dueDate: parsedData.dueDate || undefined,
-                    content: '', isCompleted: false, priority: 'medium',
-                });
-                dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newItem });
-                onItemAdded('משימה נוספה');
-            } else if (type === 'daily_task') {
+            if (type === 'task_today') {
+                const today = new Date().toISOString().split('T')[0];
                 const newItem = await addPersonalItem({
                     type: 'task',
                     title: title.trim(),
-                    dueDate: new Date().toISOString().split('T')[0],
+                    dueDate: today,
                     content: '', isCompleted: false, priority: 'medium',
                 });
                 dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newItem });
-                onItemAdded('מטלה יומית נוספה');
+                onItemAdded('משימה נוספה להיום');
+            } else if (type === 'task_tomorrow') {
+                 const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+                const newItem = await addPersonalItem({
+                    type: 'task',
+                    title: title.trim(),
+                    dueDate: tomorrowDateString,
+                    content: '', isCompleted: false, priority: 'medium',
+                });
+                dispatch({ type: 'ADD_PERSONAL_ITEM', payload: newItem });
+                onItemAdded('משימה נוספה למחר');
             } else if (type === 'habit') {
                 const newItem = await addPersonalItem({
                     type: 'habit',
@@ -69,6 +71,7 @@ const QuickAddTask: React.FC<QuickAddProps> = ({ onItemAdded }) => {
             setTitle('');
         } catch (error) {
             console.error(`Failed to add ${type}:`, error);
+            onItemAdded(`שגיאה בהוספת ${type}`);
         } finally {
             setLoadingState(null);
         }
@@ -80,27 +83,27 @@ const QuickAddTask: React.FC<QuickAddProps> = ({ onItemAdded }) => {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                onKeyPress={(e) => { if (e.key === 'Enter') handleAdd('task')}}
+                onKeyPress={(e) => { if (e.key === 'Enter') handleAdd('task_today')}}
                 placeholder="מה תרצה להוסיף?"
                 className="w-full bg-transparent text-white py-2 px-2 text-lg focus:outline-none placeholder:text-[var(--text-secondary)]"
             />
             <div className="flex items-center justify-around gap-2 border-t border-[var(--border-primary)] mt-2 pt-2">
                 <QuickAddAction 
-                    label="משימה"
-                    icon={<SparklesIcon className="w-5 h-5"/>}
-                    onClick={() => handleAdd('task')}
-                    isLoading={loadingState === 'task'}
-                    disabled={!title.trim()}
-                />
-                <QuickAddAction 
-                    label="מטלה יומית"
+                    label="משימה להיום"
                     icon={<CheckCircleIcon className="w-5 h-5"/>}
-                    onClick={() => handleAdd('daily_task')}
-                    isLoading={loadingState === 'daily_task'}
+                    onClick={() => handleAdd('task_today')}
+                    isLoading={loadingState === 'task_today'}
                     disabled={!title.trim()}
                 />
                 <QuickAddAction 
-                    label="הרגל"
+                    label="משימה למחר"
+                    icon={<CalendarIcon className="w-5 h-5"/>}
+                    onClick={() => handleAdd('task_tomorrow')}
+                    isLoading={loadingState === 'task_tomorrow'}
+                    disabled={!title.trim()}
+                />
+                <QuickAddAction 
+                    label="הרגל חדש"
                     icon={<FlameIcon className="w-5 h-5"/>}
                     onClick={() => handleAdd('habit')}
                     isLoading={loadingState === 'habit'}

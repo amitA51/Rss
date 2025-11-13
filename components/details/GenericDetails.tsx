@@ -33,8 +33,7 @@ export const GenericEdit: React.FC<EditProps> = ({ editState, dispatch }) => {
             selectionEnd = selectionStart;
         }
         
-        {/* FIX: Corrected dispatch call to match reducer action shape. */}
-        dispatch({type: 'SET_FIELD', field: 'content', value: newText });
+        dispatch({type: 'SET_FIELD', payload: { field: 'content', value: newText }});
         
         setTimeout(() => {
             textarea.focus();
@@ -50,8 +49,7 @@ export const GenericEdit: React.FC<EditProps> = ({ editState, dispatch }) => {
                 ref={contentRef}
                 dir="auto"
                 value={editState.content}
-                {/* FIX: Corrected dispatch call to match reducer action shape. */}
-                onChange={e => dispatch({type: 'SET_FIELD', field: 'content', value: e.target.value })}
+                onChange={e => dispatch({type: 'SET_FIELD', payload: { field: 'content', value: e.target.value }})}
                 rows={10}
                 className="w-full bg-[var(--bg-card)] text-[var(--text-primary)] p-3 focus:outline-none"
             />

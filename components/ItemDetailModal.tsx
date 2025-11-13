@@ -19,7 +19,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
   const { state } = useContext(AppContext);
   const [relatedItems, setRelatedItems] = useState<FeedItem[]>([]);
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   
   const modalRef = useRef<HTMLDivElement>(null);
   
@@ -27,7 +26,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
 
   useEffect(() => {
     if (item) {
-        setIsClosing(false);
         const fetchRelated = async () => {
             setIsLoadingRelated(true);
             setRelatedItems([]);
@@ -49,11 +47,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
   }, [item, state.feedItems]);
 
 
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(onClose, 400); // Wait for animation to finish
-  };
-  
   const handleToggleImportant = () => {
     if (item) {
         onUpdate(item.id, { isImportant: !item.isImportant });
@@ -72,14 +65,15 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
   const modalBgClass = state.settings.themeSettings.cardStyle === 'glass' ? 'glass-modal-bg' : 'bg-[var(--bg-secondary)]';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end justify-center z-50" onClick={onClose}>
       <div 
         ref={modalRef}
-        className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)] ${isClosing ? 'animate-modal-exit' : 'animate-modal-enter'}`}
+        className={`${modalBgClass} w-full max-w-2xl max-h-[90vh] responsive-modal rounded-t-3xl shadow-lg flex flex-col border-t border-[var(--border-primary)]`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="item-detail-title"
+        style={{ viewTransitionName: `feed-item-${item.id}` }}
       >
         <header className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center sticky top-0 bg-transparent backdrop-blur-sm z-10 rounded-t-3xl">
           <div className="flex items-center gap-3 overflow-hidden">
@@ -92,7 +86,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onSelectItem, o
             <button onClick={handleDelete} className="text-[var(--text-secondary)] hover:text-red-400 transition-colors p-2 rounded-full active:scale-95" aria-label="מחק פריט">
                 <TrashIcon className="w-5 h-5"/>
             </button>
-            <button onClick={handleClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95" aria-label="סגור חלון">
+            <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white transition-colors p-1 rounded-full active:scale-95" aria-label="סגור חלון">
                 <CloseIcon className="h-6 w-6" />
             </button>
           </div>

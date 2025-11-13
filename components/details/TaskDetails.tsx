@@ -70,31 +70,45 @@ export const TaskView: React.FC<ViewProps> = ({ item, onUpdate }) => {
 };
 
 export const TaskEdit: React.FC<EditProps> = ({ editState, dispatch }) => (
-    <div className="grid grid-cols-2 gap-4">
-        <div>
-            <label htmlFor="dueDate" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">תאריך יעד</label>
-            <input 
-                type="date" 
-                id="dueDate" 
-                value={editState.dueDate} 
-                {/* FIX: Corrected dispatch call to match reducer action shape. */}
-                onChange={(e) => dispatch({type:'SET_FIELD', field: 'dueDate', value: e.target.value})} 
-                className={inputStyles} 
-                style={{colorScheme: 'dark'}}
-            />
+    <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+            <div>
+                <label htmlFor="dueDate" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">תאריך יעד</label>
+                <input 
+                    type="date" 
+                    id="dueDate" 
+                    value={editState.dueDate} 
+                    onChange={(e) => dispatch({type:'SET_FIELD', payload: { field: 'dueDate', value: e.target.value}})} 
+                    className={inputStyles} 
+                    style={{colorScheme: 'dark'}}
+                />
+            </div>
+            <div>
+                <label htmlFor="priority" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">עדיפות</label>
+                <select 
+                    id="priority" 
+                    value={editState.priority} 
+                    onChange={(e) => dispatch({type:'SET_FIELD', payload: { field: 'priority', value: e.target.value as any}})} 
+                    className={inputStyles}
+                >
+                    <option value="low">נמוכה</option>
+                    <option value="medium">בינונית</option>
+                    <option value="high">גבוהה</option>
+                </select>
+            </div>
         </div>
         <div>
-            <label htmlFor="priority" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">עדיפות</label>
+            <label htmlFor="autoDeleteAfter" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">מחיקה אוטומטית (לאחר השלמה)</label>
             <select 
-                id="priority" 
-                value={editState.priority} 
-                {/* FIX: Corrected dispatch call to match reducer action shape. */}
-                onChange={(e) => dispatch({type:'SET_FIELD', field: 'priority', value: e.target.value as any})} 
+                id="autoDeleteAfter" 
+                value={editState.autoDeleteAfter || 0} 
+                onChange={(e) => dispatch({type:'SET_FIELD', payload: { field: 'autoDeleteAfter', value: Number(e.target.value)}})} 
                 className={inputStyles}
             >
-                <option value="low">נמוכה</option>
-                <option value="medium">בינונית</option>
-                <option value="high">גבוהה</option>
+                <option value={0}>לעולם לא</option>
+                <option value={1}>לאחר יום אחד</option>
+                <option value={7}>לאחר שבוע</option>
+                <option value={30}>לאחר חודש</option>
             </select>
         </div>
     </div>

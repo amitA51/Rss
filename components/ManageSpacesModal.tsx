@@ -98,7 +98,6 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
         await dataService.removeSpace(id);
         dispatch({ type: 'REMOVE_SPACE', payload: id });
 
-        // FIX: Use reAddSpace for the undo action.
         showStatus('success', 'המרחב נמחק.', async () => {
             await dataService.reAddSpace(spaceToDelete);
             dispatch({ type: 'ADD_SPACE', payload: spaceToDelete });
@@ -131,7 +130,6 @@ const ManageSpacesModal: React.FC<ManageSpacesModalProps> = ({ onClose }) => {
         await dataService.removeFeed(id);
         setFeeds(currentFeeds => currentFeeds.filter(f => f.id !== id));
 
-        // FIX: Use reAddFeed for the undo action.
         showStatus('success', 'הפיד נמחק.', async () => {
             await dataService.reAddFeed(feedToDelete);
             setFeeds(currentFeeds => [...currentFeeds, feedToDelete]);

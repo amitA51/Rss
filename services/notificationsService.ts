@@ -35,7 +35,6 @@ export const showTestNotification = (): void => {
                 body: 'ההתראות פועלות!',
                 icon: '/images/resized-image.png',
                 badge: '/images/resized-image.png',
-                // FIX: Removed the 'vibrate' property as it is not a recognized property in the NotificationOptions type definition, causing a compile error.
                 tag: 'spark-test-notification'
             });
         });

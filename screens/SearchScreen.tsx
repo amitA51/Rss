@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback, useContext } from 're
 import type { FeedItem } from '../types';
 import type { Screen } from '../types';
 import { summarizeItemContent, performAiSearch } from '../services/geminiService';
-// FIX: Import reAddFeedItem for the undo functionality.
 import { updateFeedItem, removeFeedItem, convertFeedItemToPersonalItem, reAddFeedItem } from '../services/dataService';
 import FeedCardV2 from '../components/FeedCardV2';
 import ItemDetailModal from '../components/ItemDetailModal';
@@ -170,7 +169,6 @@ export default function SearchScreen({ setActiveScreen }: SearchScreenProps) {
         dispatch({ type: 'REMOVE_FEED_ITEM', payload: id });
 
         showStatus('success', 'הפריט נמחק.', async () => {
-            // FIX: Added `await` to the async undo action to ensure it completes before potential subsequent actions.
             await reAddFeedItem(itemToDelete);
             dispatch({ type: 'ADD_FEED_ITEM', payload: itemToDelete });
         });

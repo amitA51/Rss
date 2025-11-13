@@ -227,17 +227,261 @@
       .svg-glow {
         filter: drop-shadow(0 0 8px var(--dynamic-accent-glow));
       }
-
-      /* Class for receding background effect - Immersive Layered Depth */
-      .receding-background {
-        transform: scale(0.96);
-        filter: blur(12px);
-        opacity: 0.6;
-        pointer-events: none;
-        transition: transform calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier), filter calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier), opacity calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier);
+      
+      /* --- NEW ROADMAP MVP STYLES --- */
+      .roadmap-stage-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 1.25rem; /* 20px */
+        padding: 1rem 1.25rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transition: all calc(0.2s * var(--fi-duration-factor)) var(--fi-cubic-bezier);
+      }
+      .roadmap-stage-card.dragging {
+        opacity: 0.5;
+        transform: scale(1.02);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      }
+      .roadmap-progress-bar {
+        background-color: var(--bg-secondary);
+        border-radius: 9999px;
+        overflow: hidden;
+      }
+      .roadmap-progress-bar-inner {
+        height: 100%;
+        border-radius: 9999px;
+        transition: width calc(0.5s * var(--fi-duration-factor)) var(--fi-cubic-bezier);
+      }
+      .roadmap-task-checkbox {
+        appearance: none;
+        width: 1.5rem; height: 1.5rem;
+        min-width: 1.5rem;
+        border-radius: 50%;
+        border: 2px solid var(--text-secondary);
+        cursor: pointer;
+        transition: all calc(0.2s * var(--fi-duration-factor)) var(--fi-cubic-bezier);
+        position: relative;
+        flex-shrink: 0;
+      }
+      .roadmap-task-checkbox:checked {
+        background-color: var(--success);
+        border-color: var(--success);
+        transform: scale(1.1);
+      }
+      .roadmap-task-checkbox:checked::after {
+        content: '✓';
+        font-weight: bold;
+        color: white;
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1rem;
+      }
+      .roadmap-task-item.completed > * {
+        color: var(--text-secondary);
+        text-decoration: line-through;
+        opacity: 0.7;
+      }
+      .quick-add-bar {
+        position: sticky;
+        bottom: 1rem;
+        z-index: 10;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        background-color: rgba(28, 28, 28, 0.7);
+        border: 1px solid var(--border-primary);
+        padding: 0.5rem;
+        border-radius: 1.25rem;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      }
+      .roadmap-skeleton-card .shimmer {
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+        background-size: 200% 100%;
+        animation: shimmer calc(1.5s * var(--fi-duration-factor)) infinite linear;
+      }
+      @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      .roadmap-toast {
+        position: fixed;
+        bottom: 5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        animation: toast-fade-in-out calc(3s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
+      }
+      @keyframes toast-fade-in-out {
+        0%, 100% { opacity: 0; transform: translate(-50%, 10px); }
+        10%, 90% { opacity: 1; transform: translate(-50%, 0); }
       }
 
+      /* --- NEW ROADMAP ENHANCED STYLES --- */
+      .kanban-board {
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        padding-bottom: 1rem;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-primary) transparent;
+      }
+      .kanban-column {
+        flex-shrink: 0;
+        width: 320px;
+        background-color: var(--bg-secondary);
+        border-radius: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        height: 70vh;
+      }
+      .kanban-column-header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+      }
+      .kanban-column-body {
+        padding: 0.75rem;
+        overflow-y: auto;
+        flex-grow: 1;
+      }
+       .kanban-column-body > div + div {
+        margin-top: 0.75rem;
+      }
+      .kanban-column-drag-over {
+        background-color: var(--dynamic-accent-glow);
+      }
+      .stage-actions-menu {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        opacity: 0;
+        transition: opacity 200ms var(--fi-cubic-bezier);
+        z-index: 5;
+        background-color: var(--bg-secondary);
+        border-radius: 9999px;
+        border: 1px solid var(--border-primary);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      .roadmap-stage-card:hover .stage-actions-menu {
+        opacity: 1;
+      }
+      .attachment-dropzone {
+        border: 2px dashed var(--border-primary);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        text-align: center;
+        transition: all 200ms;
+        cursor: pointer;
+      }
+      .attachment-dropzone.drag-over {
+        border-color: var(--dynamic-accent-start);
+        background-color: var(--dynamic-accent-glow);
+      }
+      .file-preview {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background-color: var(--bg-secondary);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        position: relative;
+        overflow: hidden;
+      }
+      .file-preview-thumbnail {
+        width: 2.5rem;
+        height: 2.5rem;
+        object-fit: cover;
+        border-radius: 0.25rem;
+        flex-shrink: 0;
+      }
+      .file-preview-progress {
+        position: absolute;
+        bottom: 0; right: 0; left: 0;
+        height: 3px;
+        background-color: var(--dynamic-accent-start);
+        transition: width 300ms;
+      }
 
+      /* --- NEW ROADMAP ADVANCED STYLES --- */
+      .timeline-container {
+        overflow-x: auto;
+        padding-bottom: 1rem;
+        border: 1px solid var(--border-primary);
+        border-radius: 1rem;
+      }
+      .timeline-grid {
+        display: grid;
+        grid-template-rows: auto;
+        min-width: 1500px; /* Example min-width */
+        position: relative;
+      }
+      .timeline-header {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+        background-color: var(--bg-secondary);
+        position: sticky; top: 0; z-index: 1;
+      }
+      .timeline-day-header {
+        text-align: center;
+        padding: 0.5rem 0;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        border-left: 1px solid var(--border-primary);
+      }
+      .timeline-row {
+        height: 50px;
+        position: relative;
+        border-bottom: 1px solid var(--border-primary);
+      }
+      .timeline-stage-bar {
+        position: absolute;
+        height: 36px;
+        top: 7px;
+        background-color: rgba(59, 130, 246, 0.4);
+        border: 1px solid #3B82F6;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 0.5rem;
+        cursor: grab;
+        transition: all 150ms;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .timeline-stage-bar:active { cursor: grabbing; }
+      .timeline-stage-bar.dragging { opacity: 0.7; transform: scale(1.02); }
+      .timeline-stage-bar-handle {
+        position: absolute;
+        top: 0; bottom: 0;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      .timeline-stage-bar-handle.start { right: -4px; }
+      .timeline-stage-bar-handle.end { left: -4px; }
+      .timeline-dependency-line {
+        position: absolute;
+        stroke: var(--dynamic-accent-start);
+        stroke-width: 1.5;
+        fill: none;
+        pointer-events: none;
+        opacity: 0.7;
+        filter: drop-shadow(0 0 3px var(--dynamic-accent-glow));
+      }
+      .audio-recorder .recording-dot {
+        width: 10px; height: 10px;
+        background-color: var(--danger);
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      
       /* --- FANTASY (Fi) ANIMATIONS - Cinematic & RESPONSIVE Motion --- */
       @keyframes screen-enter {
         from {
@@ -253,189 +497,143 @@
         animation: screen-enter calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
       }
       
-      @keyframes item-enter-fi {
-        from { opacity: 0; transform: translateY(15px); }
+      /* --- Fantasy (Fi): Shared Element Transition Styles --- */
+      @keyframes fade-in { from { opacity: 0; } }
+      @keyframes fade-out { to { opacity: 0; } }
+      @keyframes slide-from-bottom { from { transform: translateY(30px); } }
+      @keyframes slide-to-bottom { to { transform: translateY(30px); } }
+
+      ::view-transition-old(root) {
+        animation: 
+          calc(300ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) fade-out,
+          calc(300ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) slide-from-bottom;
+      }
+      ::view-transition-new(root) {
+        animation: 
+          calc(300ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) fade-in,
+          calc(300ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) slide-from-bottom;
+      }
+      
+      /* Make the animation faster when only a single element is transitioning */
+      ::view-transition-group(*),
+      ::view-transition-image-pair(*) {
+        animation-duration: calc(0.5s * var(--fi-duration-factor));
+        animation-timing-function: var(--fi-cubic-bezier);
+      }
+
+      /* --- NEW PREMIUM ROADMAP STYLES --- */
+      .roadmap-modal-overlay {
+        animation: modal-fade-in calc(220ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
+      }
+      @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+      
+      .roadmap-modal-content {
+        animation: modal-slide-up calc(220ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
+        background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05), transparent 40%);
+      }
+      @keyframes modal-slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+      .roadmap-stage-card-v2 {
+        background-color: rgba(30, 30, 30, 0.75);
+        backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+        transition: all 250ms var(--fi-cubic-bezier);
+      }
+      .roadmap-stage-card-v2:hover {
+        transform: translateY(-4px) scale(1.01);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px var(--dynamic-accent-glow);
+      }
+
+      .stage-tabs {
+        scrollbar-width: none; /* Firefox */
+      }
+      .stage-tabs::-webkit-scrollbar {
+        display: none; /* Safari and Chrome */
+      }
+      .stage-tab-button {
+        position: relative;
+        transition: color calc(180ms * var(--fi-duration-factor)) var(--fi-cubic-bezier);
+      }
+      .stage-tab-button.active::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--accent-gradient);
+        border-radius: 1px;
+        animation: tab-underline-grow calc(200ms * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards;
+      }
+      @keyframes tab-underline-grow {
+        from { transform: scaleX(0); } to { transform: scaleX(1); }
+      }
+
+      .tab-panel {
+        animation: tab-fade-in calc(220ms * var(--fi-duration-factor)) ease-out forwards;
+      }
+      @keyframes tab-fade-in {
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
-      .animate-item-enter-fi {
-        animation: item-enter-fi calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) both;
+
+      .confetti { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
+      .confetti-piece { position: absolute; width: 8px; height: 16px; background: var(--dynamic-accent-start); top: -20px; opacity: 0; }
+      @keyframes confetti-fall {
+        0% { transform: translateY(0) rotateZ(0); opacity: 1; }
+        100% { transform: translateY(100vh) rotateZ(720deg); opacity: 0; }
       }
       
-      /* Responsive Modal Animations */
-      @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-      @keyframes modal-scale-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
-      @keyframes modal-slide-in-mobile { from { transform: translateY(100%); } to { transform: translateY(0); } }
-      @keyframes modal-slide-out-mobile { from { transform: translateY(0); } to { transform: translateY(100%); } }
-
-      /* Base animation (desktop) */
-      .animate-modal-enter { animation: modal-scale-in calc(0.3s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
-      .animate-modal-exit { animation: modal-scale-out calc(0.25s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
-
-
-      /* Task item strikethrough animation */
-      .task-text::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        right: 0;
-        height: 1.5px;
-        background-color: var(--text-secondary);
-        width: 0;
-        transition: width calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.68, -0.55, 0.27, 1.55);
+      .roadmap-stat-card {
+        background-color: rgba(255,255,255,0.05);
+        border: 1px solid var(--border-primary);
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
       }
-      .task-completed .task-text::after {
-        width: 100%;
+      .simple-bar-chart .bar {
+        transition: height 0.3s ease-out;
+      }
+      .simple-bar-chart .bar:hover {
+        opacity: 1;
       }
 
-      /* Shimmer animation for skeleton loaders - more subtle */
-      @keyframes shimmer {
-        100% {
-          transform: translateX(100%);
-        }
-      }
-      .shimmer-bg::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        transform: translateX(-100%);
-        background-image: linear-gradient(
-          90deg,
-          rgba(255, 255, 255, 0) 0,
-          rgba(255, 255, 255, 0.04) 20%,
-          rgba(255, 255, 255, 0.08) 60%,
-          rgba(255, 255, 255, 0)
-        );
-        animation: shimmer calc(2.5s * var(--fi-duration-factor)) infinite;
-      }
-      
-      /* Custom Checkbox Animation */
-      @keyframes check-bounce {
-        0% { transform: scale(0.8); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
-      }
-      .animate-check-bounce {
-        animation: check-bounce calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      }
-
-      /* Streak bump animation */
-      @keyframes bump-up {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.4); }
-        100% { transform: scale(1); }
-      }
-      .animate-bump-up {
-        display: inline-block;
-        animation: bump-up calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-
-      /* Habit celebration sparkles - more dynamic */
-      @keyframes sparkle-animation {
-        0% { transform: scale(0) rotate(0deg); opacity: 0.7; }
-        50% { opacity: 1; }
-        100% { transform: scale(1.5) rotate(90deg); opacity: 0; }
-      }
-      .celebrate-sparkle {
-        position: absolute;
-        background-color: var(--dynamic-accent-highlight);
+      .fab {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
-        animation: sparkle-animation calc(0.8s * var(--fi-duration-factor)) ease-out forwards;
-        box-shadow: 0 0 6px var(--dynamic-accent-highlight), 0 0 12px var(--dynamic-accent-highlight);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--accent-gradient);
+        box-shadow: 0 8px 25px var(--dynamic-accent-glow);
+        transition: all 200ms var(--fi-cubic-bezier);
+        z-index: 100;
       }
-      
-      /* Style for completed items */
-      .completed-item, .completed-habit {
-        opacity: 0.5;
-        transform: scale(0.98);
-        transition: opacity calc(0.4s * var(--fi-duration-factor)), transform calc(0.4s * var(--fi-duration-factor));
+      .fab:hover {
+        transform: scale(1.1);
+        box-shadow: 0 12px 30px var(--dynamic-accent-glow);
       }
-      .completed-item:hover, .completed-habit:hover {
-          opacity: 0.7;
-      }
-      .completed-habit {
-        box-shadow: 0 0 20px var(--dynamic-accent-glow);
-      }
-      
-      /* Focus Mode styles */
-      .focus-mode .completed-item, .focus-mode .completed-habit {
-        opacity: 0.35 !important;
-      }
-      .focus-mode .non-essential-section {
-        opacity: 0.3;
-        pointer-events: none;
+      .fab:active {
+        transform: scale(0.95);
       }
 
-      /* Drag & Drop styles */
-      .dragging-placeholder {
-        background: rgba(255, 255, 255, 0.05);
-        border: 2px dashed var(--border-primary);
-        border-radius: 1.5rem;
-        height: 5rem;
-      }
-      .dragging-item {
-        opacity: 0.5;
-        transform: scale(1.03) rotate(2deg);
-        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-      }
-      .kanban-column-drag-over {
-        background-color: rgba(255, 255, 255, 0.04);
-      }
-      .calendar-day-drag-over {
-        background-color: var(--dynamic-accent-color);
-        border-radius: 0.5rem;
-      }
-
-      /* Selection Mode Styles */
-      .selection-mode .themed-card {
-          transition: transform calc(0.2s * var(--fi-duration-factor)), box-shadow calc(0.2s * var(--fi-duration-factor)), border-color calc(0.2s * var(--fi-duration-factor));
-      }
-      .selection-mode .themed-card.selected {
-          transform: scale(0.97);
-          border-color: var(--dynamic-accent-start) !important;
-          box-shadow: 0 0 20px var(--dynamic-accent-glow);
-      }
-      
-      /* --- Mobile Responsiveness --- */
-      .app-container {
-        padding-left: 1rem;
-        padding-right: 1rem;
-      }
-      @media (max-width: 639px) {
-        .app-container {
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
+      @media print {
+        body, #root {
+          background-color: white !important;
+          color: black !important;
         }
-
-        .responsive-modal {
-            width: 100%;
-            max-width: 100%;
-            height: 100%;
-            max-height: 100%;
-            border-radius: 0 !important;
+        .themed-card, .roadmap-stage-card, .roadmap-stage-card-v2 {
+           box-shadow: none !important;
+           border: 1px solid #ccc !important;
         }
-        .responsive-modal header {
-            border-radius: 0 !important;
-        }
-        /* Mobile-specific animations */
-        .animate-modal-enter { animation: modal-slide-in-mobile calc(0.4s * var(--fi-duration-factor)) var(--fi-cubic-bezier) forwards; }
-        .animate-modal-exit { animation: modal-slide-out-mobile calc(0.3s * var(--fi-duration-factor)) cubic-bezier(0.6, 0, 0.8, 0) forwards; }
-
-        /* Reduce padding on cards for mobile */
-        .density-comfortable .themed-card { padding: 1rem; }
-        .density-compact .themed-card { padding: 0.75rem; }
-
-        /* Increase touch targets in headers */
-        header button {
-            padding: 0.75rem;
-        }
-        header button.p-1, header button.p-2, header button.p-3 {
-            padding: 0.75rem !important;
-        }
+        .roadmap-print-only { display: block !important; }
+        .roadmap-no-print { display: none !important; }
       }
-
     </style>
   <script type="importmap">
 {
@@ -443,22 +641,14 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
-    "showdown": "https://cdn.jsdelivr.net/npm/showdown/+esm"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "showdown": "https://aistudiocdn.com/showdown@^2.1.0"
   }
 }
 </script>
 </head>
-  <body class="text-gray-200">
-    <div id="root" class="screen-wrapper"></div>
-    <script src="https://apis.google.com/js/api.js"></script>
+  <body>
+    <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    <script>
-      // Interactive background effect
-      document.addEventListener('mousemove', (e) => {
-        document.body.style.setProperty('--mouse-x', `${e.clientX}px`);
-        document.body.style.setProperty('--mouse-y', `${e.clientY}px`);
-      });
-    </script>
   </body>
 </html>

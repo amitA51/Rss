@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy, useContext, useEffect, useMemo } from 'react';
+import React, { useState, Suspense, lazy, useContext, useEffect, useMemo, useCallback } from 'react';
 import BottomNavBar from './components/BottomNavBar';
 import { loadSettings } from './services/settingsService';
 import { AppProvider, AppContext } from './state/AppContext';
@@ -8,9 +8,12 @@ import type { Screen, PersonalItem } from './types';
 import { updateAppBadge } from './services/notificationsService';
 import { RefreshIcon } from './components/icons';
 import * as dataService from './services/dataService';
+import * as googleCalendarService from './services/googleCalendarService';
 import { generatePalette } from './services/styleUtils';
 import StatusMessage, { StatusMessageType } from './components/StatusMessage';
 import { useHabitReminders } from './hooks/useHabitReminders';
+import { ModalProvider } from './state/ModalContext';
+import ModalRoot from './components/ModalRoot';
 
 
 // --- Polished Loading Component ---
@@ -55,9 +58,81 @@ const ThemedApp: React.FC = () => {
     // Schedule habit reminders
     useHabitReminders();
 
-    const showStatus = (type: StatusMessageType, text: string, onUndo?: () => Promise<void> | void) => {
+    const showStatus = useCallback((type: StatusMessageType, text: string, onUndo?: () => Promise<void> | void) => {
         setStatusMessage({ type, text, id: Date.now(), onUndo });
-    };
+    }, []);
+    
+    // Auto-cleanup hook
+    useEffect(() => {
+        const cleanup = async () => {
+            const deletedIds = await dataService.cleanupCompletedTasks();
+            if (deletedIds.length > 0) {
+                console.log(`Auto-cleaned ${deletedIds.length} tasks.`);
+                deletedIds.forEach(id => dispatch({ type: 'REMOVE_PERSONAL_ITEM', payload: id }));
+            }
+        };
+        cleanup();
+    }, [dispatch]);
+    
+    // Google Calendar Integration
+    useEffect(() => {
+        const handleAuthChange = async (isSignedIn: boolean) => {
+            dispatch({ type: 'SET_GOOGLE_AUTH_STATE', payload: isSignedIn ? 'signedIn' : 'signedOut' });
+            if (isSignedIn) {
+                try {
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    const todayEnd = new Date();
+                    todayEnd.setHours(23, 59, 59, 999);
+                    const events = await googleCalendarService.getEventsForDateRange(todayStart, todayEnd);
+                    dispatch({ type: 'SET_CALENDAR_EVENTS', payload: events });
+                } catch (error: any) {
+                    console.error("Failed to fetch calendar events:", error);
+                    
+                    let errorMessage = 'שגיאה בסנכרון לוח השנה.';
+                    // GAPI errors are nested. This safely extracts the message.
+                    if (error?.result?.error?.message) {
+                        errorMessage = `שגיאת לוח שנה: ${error.result.error.message}`;
+                    }
+                    showStatus('error', errorMessage);
+
+                    // Sign out only on authentication errors (401 Unauthorized)
+                    if (error?.result?.error?.code === 401) {
+                         await googleCalendarService.signOut();
+                    }
+                }
+            } else {
+                dispatch({ type: 'SET_CALENDAR_EVENTS', payload: [] });
+            }
+        };
+        
+        const checkAndInit = async () => {
+            if ((window as any).gapi && (window as any).google) {
+                try {
+                    await googleCalendarService.initGoogleClient(handleAuthChange);
+                } catch (error: any) {
+                    console.error("Error initializing Google Client:", error);
+                    let errorMessage = 'שגיאה באתחול החיבור ל-Google.';
+                    
+                    if (error?.details) { // gapi.client.init errors
+                        errorMessage = `שגיאת אתחול: ${error.details}`;
+                    } else if (error?.result?.error?.message) { // GAPI standard error
+                        errorMessage = `שגיאת אתחול: ${error.result.error.message}`;
+                    } else if (error.message) { // Generic JS error
+                        errorMessage = `שגיאת אתחול: ${error.message}`;
+                    }
+                    
+                    showStatus('error', errorMessage);
+                    dispatch({ type: 'SET_GOOGLE_AUTH_STATE', payload: 'signedOut' });
+                }
+            } else {
+                setTimeout(checkAndInit, 100);
+            }
+        };
+        checkAndInit();
+
+    }, [dispatch, showStatus]);
+
 
     useEffect(() => {
         const body = document.body;
@@ -167,7 +242,6 @@ const ThemedApp: React.FC = () => {
     const handleEndSession = async (loggedDuration?: number, isCancel: boolean = false) => {
         const sessionToRestore = state.focusSession; // Capture session state before clearing
         if (loggedDuration && sessionToRestore) {
-            // FIX: Await the async data service call to get the updated item.
             const updatedItem = await dataService.logFocusSession(sessionToRestore.item.id, loggedDuration);
             dispatch({ type: 'UPDATE_PERSONAL_ITEM', payload: { id: updatedItem.id, updates: updatedItem } });
         }
@@ -235,7 +309,10 @@ const ThemedApp: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AppProvider>
-      <ThemedApp />
+      <ModalProvider>
+        <ThemedApp />
+        <ModalRoot />
+      </ModalProvider>
     </AppProvider>
   );
 };

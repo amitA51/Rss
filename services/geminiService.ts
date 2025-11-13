@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { FeedItem, Tag, PersonalItem, Space, RoadmapStep, AiPersonality } from '../types';
+import type { FeedItem, Tag, PersonalItem, Space, RoadmapPhase, AiPersonality, AiFeedSettings, RoadmapTask, SubTask } from '../types';
 import { loadSettings } from './settingsService';
 import { getFeedItems, getPersonalItems } from './dataService';
+import { AVAILABLE_ICONS } from '../constants';
 
 // This service is now SOLELY responsible for interacting with the Gemini API.
 // All local data persistence has been moved to `dataService.ts`.
@@ -45,13 +46,37 @@ interface Flashcard {
 interface FlashcardResponse {
     flashcards: Flashcard[];
 }
-interface RoadmapStepResponse {
+interface RoadmapTaskResponse {
+    title: string;
+}
+interface RoadmapPhaseResponse {
     title: string;
     description: string;
     duration: string;
+    tasks: RoadmapTaskResponse[];
 }
 interface RoadmapResponse {
-    steps: RoadmapStepResponse[];
+    phases: RoadmapPhaseResponse[];
+}
+interface SubTaskResponse {
+    subTasks: { title: string }[];
+}
+interface IconSuggestionResult {
+    iconName: string;
+}
+interface AiGeneratedFeedItem {
+    title: string;
+    summary_he: string;
+    insights: string[];
+    topics: string[];
+    tags: string[];
+    level: 'beginner' | 'intermediate' | 'advanced';
+    estimated_read_time_min: number;
+    digest: string;
+}
+
+interface AiFeedGenerationResponse {
+    items: AiGeneratedFeedItem[];
 }
 
 
@@ -273,12 +298,59 @@ Respond ONLY with the JSON object.`;
 };
 
 /**
+ * Finds personal items related to a given item using the Gemini API.
+ * @param currentItem The item to find relations for.
+ * @param allItems The corpus of personal items to search through.
+ * @returns An array of related PersonalItems.
+ */
+export const findRelatedPersonalItems = async (currentItem: PersonalItem, allItems: PersonalItem[]): Promise<PersonalItem[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const corpus = allItems
+        .filter(item => item.id !== currentItem.id)
+        .map(item => ({
+            id: item.id,
+            type: item.type,
+            title: item.title,
+            content: (item.content || '').substring(0, 300),
+        }));
+    
+    const prompt = `You are a smart content recommender for a personal knowledge base. Based on the "Current Item" provided, find the 3 most semantically relevant items from the "Corpus of Items".
+Look for thematic connections, related concepts, or items that might be part of the same project, even if not explicitly linked.
+Respond with a JSON object containing a single key "relatedItemIds", which is an array of the top 3 most relevant item IDs.
+
+Current Item:
+${JSON.stringify({ type: currentItem.type, title: currentItem.title, content: (currentItem.content || '').substring(0, 500) })}
+
+Corpus of Items:
+${JSON.stringify(corpus.slice(0, 200))} // Limit corpus size
+
+Respond ONLY with the JSON object.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+        });
+        
+        const result = parseAiJson<RelatedItemsResult>(response.text);
+        if (!result.relatedItemIds) return [];
+
+        const relatedIds = new Set(result.relatedItemIds);
+        return allItems.filter(item => relatedIds.has(item.id));
+
+    } catch (error) {
+        console.error("Error finding related personal items:", error);
+        return [];
+    }
+};
+
+/**
  * Creates a chat session for the AI Assistant screen, pre-loaded with context.
  */
 export const createAssistantChat = async (): Promise<Chat> => {
     if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    // FIX: Added `await` to the `getFeedItems()` and `getPersonalItems()` calls inside `createAssistantChat`. These functions now return Promises, and awaiting them ensures the data is fetched and available before being used to construct the chat context, preventing a race condition.
     const [feedItems, personalItems] = await Promise.all([getFeedItems(), getPersonalItems()]);
 
     const context = `
@@ -520,11 +592,51 @@ export const generateFlashcards = async (content: string): Promise<{id: string; 
     }
 };
 
-export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapStep, 'isCompleted' | 'id' | 'notes'>[]> => {
+// FIX: Added function to generate tasks for a specific roadmap phase.
+export const generateTasksForPhase = async (phaseTitle: string): Promise<RoadmapTaskResponse[]> => {
     if (!ai) throw new Error("API Key not configured.");
     const settings = loadSettings();
-    const prompt = `Based on the following goal, generate a high-level roadmap with 3-5 main steps. For each step, provide a title, a short description, and an estimated duration (e.g., "1 week", "2 days").
-    Return a JSON object with a key "steps", which is an array of objects, each with "title", "description", and "duration" keys. The response must be in Hebrew.
+    const prompt = `Based on the roadmap phase title "${phaseTitle}", generate a list of 3-5 smaller, actionable tasks.
+    Return a JSON object with a key "tasks", which is an array of objects, each with a "title" key. The response must be in Hebrew.`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        tasks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING }
+                                },
+                                required: ['title']
+                            }
+                        }
+                    },
+                    required: ['tasks']
+                }
+            }
+        });
+        const result: { tasks: RoadmapTaskResponse[] } = JSON.parse(response.text);
+        return result.tasks;
+    } catch (error) {
+        console.error("Error generating tasks for phase:", error);
+        throw new Error("Failed to generate tasks for phase.");
+    }
+};
+
+export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapPhase, 'id' | 'order' | 'notes'>[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Based on the following goal, generate a high-level roadmap.
+The roadmap should consist of 3-5 main phases. Each phase should have a title, a short description, an estimated duration (e.g., "1 week", "2 days"), and a list of 2-4 concrete tasks.
+Return a JSON object with a key "phases", which is an array of phase objects. Each phase object must contain "title", "description", "duration", and a "tasks" array. Each object in the "tasks" array should have a "title". The response must be in Hebrew.
 
     Goal:
     ${goal}
@@ -532,14 +644,14 @@ export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapStep, '
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro', // Use Pro for better planning
+            model: 'gemini-2.5-pro',
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
-                        steps: {
+                        phases: {
                             type: Type.ARRAY,
                             items: {
                                 type: Type.OBJECT,
@@ -547,19 +659,276 @@ export const generateRoadmap = async (goal: string): Promise<Omit<RoadmapStep, '
                                     title: { type: Type.STRING },
                                     description: { type: Type.STRING },
                                     duration: { type: Type.STRING },
+                                    tasks: {
+                                        type: Type.ARRAY,
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                title: { type: Type.STRING }
+                                            },
+                                            required: ['title']
+                                        }
+                                    }
                                 },
-                                required: ['title', 'description', 'duration']
+                                required: ['title', 'description', 'duration', 'tasks']
                             }
                         },
                     },
-                    required: ['steps']
+                    required: ['phases']
                 }
             }
         });
         const result: RoadmapResponse = JSON.parse(response.text);
-        return result.steps;
+        return result.phases.map(phase => ({
+            ...phase,
+            // FIX: Add missing properties to satisfy the Omit<RoadmapPhase, ...> type.
+            startDate: new Date().toISOString().split('T')[0],
+            endDate: new Date().toISOString().split('T')[0],
+            attachments: [],
+            status: 'pending',
+            dependencies: [],
+            estimatedHours: 0,
+            tasks: phase.tasks.map((task, index) => ({
+                ...task,
+                id: `task-${Date.now()}-${Math.random()}`,
+                isCompleted: false,
+                order: index
+            }))
+        }));
     } catch (error) {
         console.error("Error generating roadmap:", error);
         throw new Error("Failed to generate roadmap.");
+    }
+};
+
+export const breakDownRoadmapTask = async (taskTitle: string): Promise<Partial<SubTask>[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    const prompt = `Break down the following complex task into a list of 3-5 smaller, actionable sub-tasks.
+    Return a JSON object with a key "subTasks", which is an array of objects, each with a "title" key. The response must be in Hebrew.
+
+    Task to break down:
+    "${taskTitle}"
+    `;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        subTasks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING }
+                                },
+                                required: ['title']
+                            }
+                        }
+                    },
+                    required: ['subTasks']
+                }
+            }
+        });
+        const result: SubTaskResponse = JSON.parse(response.text);
+        return result.subTasks;
+    } catch (error) {
+        console.error("Error breaking down task:", error);
+        throw new Error("Failed to break down task.");
+    }
+};
+
+export const suggestIconForTitle = async (title: string): Promise<string> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+    
+    const prompt = `You are an intelligent icon assigner for a productivity app. Your task is to select the most relevant icon for a new item based on its title.
+    
+    Choose exactly one icon name from this list: ${JSON.stringify(AVAILABLE_ICONS)}
+    
+    Analyze the title and pick the icon that best represents the item's category or purpose. For example, for "Read 'Atomic Habits'", you should choose "book-open". For "Plan Q3 marketing strategy", choose "target".
+    
+    Title: "${title}"
+    
+    Respond ONLY with a valid JSON object with a single key "iconName" containing the chosen icon name string.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        iconName: { 
+                            type: Type.STRING,
+                            enum: AVAILABLE_ICONS as any, // Cast to any to satisfy the type
+                            description: "The single best icon name from the provided list."
+                        }
+                    },
+                    required: ['iconName']
+                }
+            }
+        });
+        const result = JSON.parse(response.text) as IconSuggestionResult;
+        if (AVAILABLE_ICONS.includes(result.iconName as any)) {
+            return result.iconName;
+        }
+        return 'sparkles'; // Fallback
+    } catch (error) {
+        console.error("Error suggesting icon:", error);
+        return 'sparkles'; // Fallback on error
+    }
+};
+
+export const generateAiFeedItems = async (aiFeedSettings: AiFeedSettings, existingTitles: string[] = []): Promise<AiGeneratedFeedItem[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+
+    const { itemsPerRefresh: count, topics, customPrompt } = aiFeedSettings;
+    const topicsString = (topics && topics.length > 0) ? topics.join(', ') : 'סייבר, פסיכולוגיה, כלכלה התנהגותית, שוק ההון, עסקים ופיננסים';
+
+    const prompt = `
+    אתה עוזר שמייצר פיד ידע אישי בעברית.
+    צור ${count} פריטי תוכן חדשים, ייחודיים ומעניינים בנושאים: ${topicsString}.
+    ${customPrompt ? `הנחיה נוספת: ${customPrompt}` : ''}
+    ודא שהכותרות אינן מופיעות ברשימה הבאה של כותרות קיימות: ${JSON.stringify(existingTitles.slice(-50))}.
+
+    הנחיות חשובות:
+    1. החזר תמיד רק JSON תקין ולא טקסט חופשי, במבנה הבא: { "items": [...] }.
+    2. כל פריט בתוך המערך "items" הוא אובייקט עם השדות הבאים בלבד:
+       - title: (string) כותרת ייחודית ומושכת.
+       - summary_he: (string) תקציר איכותי בעברית, עד 120 מילים.
+       - insights: (string[]) מערך של 3 תובנות קצרות ושימושיות מהתקציר.
+       - topics: (string[]) מערך של 1-3 נושאים עיקריים (למשל: "סייבר", "פסיכולוגיה").
+       - tags: (string[]) מערך של 2-4 תגיות ספציфиות יותר.
+       - level: (string) אחת מהרמות: 'beginner', 'intermediate', 'advanced'.
+       - estimated_read_time_min: (number) הערכת זמן קריאה בדקות.
+       - digest: (string) משפט אחד קצר שמסכם את מהות הפריט.
+    3. שמור על עברית ברורה, קצרה ושימושית.
+    4. אין להמציא עובדות או ציטוטים לא מבוססים.
+    5. ודא שה-JSON תקין לחלוטין.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro', // Using Pro for better quality generation
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        items: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    summary_he: { type: Type.STRING },
+                                    insights: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    level: { type: Type.STRING, enum: ['beginner', 'intermediate', 'advanced'] },
+                                    estimated_read_time_min: { type: Type.NUMBER },
+                                    digest: { type: Type.STRING }
+                                },
+                                required: ['title', 'summary_he', 'insights', 'topics', 'tags', 'level', 'estimated_read_time_min', 'digest']
+                            }
+                        }
+                    },
+                    required: ['items']
+                }
+            }
+        });
+        const result: AiFeedGenerationResponse = JSON.parse(response.text);
+        return result.items || [];
+    } catch (error) {
+        console.error("Error generating AI feed items:", error);
+        return [];
+    }
+};
+
+export const suggestAiFeedTopics = async (existingTopics: string[]): Promise<string[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+
+    const prompt = `
+    אתה עוזר יצירתי שממליץ על נושאים חדשים ומעניינים לפיד ידע אישי.
+    בהתבסס על הנושאים הקיימים, הצע 5 נושאים חדשים, קשורים אך שונים, בעברית.
+    הימנע מהצעת נושאים שכבר קיימים ברשימה.
+
+    נושאים קיימים: ${JSON.stringify(existingTopics)}
+    
+    החזר רק מערך JSON של 5 מחרוזות.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.STRING,
+                    }
+                }
+            }
+        });
+        return JSON.parse(response.text) as string[];
+    } catch (error) {
+        console.error("Error suggesting AI feed topics:", error);
+        throw new Error("שגיאה בהצעת נושאים חדשים.");
+    }
+};
+
+/**
+ * Suggests tags for a given site name for the password manager.
+ * @param siteName The name of the site or service.
+ * @returns A promise that resolves to an array of suggested tags.
+ */
+export const suggestTagsForSite = async (siteName: string): Promise<string[]> => {
+    if (!ai) throw new Error("API Key not configured.");
+    const settings = loadSettings();
+
+    const prompt = `
+    Given the site name "${siteName}", suggest up to 3 relevant tags in Hebrew from the following list: 
+    ['עבודה', 'פיננסי', 'אישי', 'רשת חברתית', 'קניות', 'בידור', 'חדשות', 'נסיעות', 'בריאות', 'לימודים'].
+    
+    For example:
+    - "GitHub" -> ["עבודה"]
+    - "Bank Leumi" -> ["פיננסי"]
+    - "Facebook" -> ["רשת חברתית", "אישי"]
+    - "Amazon" -> ["קניות"]
+    - "Netflix" -> ["בידור"]
+
+    Respond ONLY with a JSON array of strings.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: settings.aiModel,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                }
+            }
+        });
+        const tags = JSON.parse(response.text) as string[];
+        return tags;
+    } catch (error) {
+        console.error("Error suggesting tags for site:", error);
+        return [];
     }
 };

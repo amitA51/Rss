@@ -83,8 +83,7 @@ export const BookEdit: React.FC<EditProps> = ({ editState, dispatch }) => {
                 <input 
                     type="text" 
                     value={editState.author} 
-                    {/* FIX: Corrected dispatch call to match reducer action shape. */}
-                    onChange={e => dispatch({type:'SET_FIELD', field: 'author', value: e.target.value})} 
+                    onChange={e => dispatch({type:'SET_FIELD', payload: { field: 'author', value: e.target.value}})} 
                     className={inputStyles}
                 />
             </div>
@@ -93,8 +92,7 @@ export const BookEdit: React.FC<EditProps> = ({ editState, dispatch }) => {
                 <input 
                     type="number" 
                     value={editState.totalPages} 
-                    {/* FIX: Corrected dispatch call to match reducer action shape. */}
-                    onChange={e => dispatch({type:'SET_FIELD', field: 'totalPages', value: e.target.value})} 
+                    onChange={e => dispatch({type:'SET_FIELD', payload: { field: 'totalPages', value: e.target.value}})} 
                     className={inputStyles}
                 />
             </div>

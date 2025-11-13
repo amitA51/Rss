@@ -32,7 +32,6 @@ const GratitudeTracker: React.FC = () => {
         if (window.navigator.vibrate) {
             window.navigator.vibrate(50);
         }
-        // FIX: Await the async data service call to get the created item.
         const newItem = await addPersonalItem({
             type: 'gratitude',
             title: `הכרת תודה - ${new Date().toLocaleDateString('he-IL')}`,

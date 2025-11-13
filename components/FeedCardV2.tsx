@@ -67,8 +67,13 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
     sourceText = new URL(item.link).hostname.replace('www.', '');
     icon = <FeedIcon className="w-5 h-5" />;
   } else if (item.type === 'spark') {
-    sourceText = 'ספארק אישי';
-    icon = <SparklesIcon className="w-5 h-5" />;
+    if (item.source === 'AI_GENERATED') {
+        sourceText = 'נוצר ע"י AI';
+        icon = <BrainCircuitIcon className="w-5 h-5" />;
+    } else {
+        sourceText = 'ספארק אישי';
+        icon = <SparklesIcon className="w-5 h-5" />;
+    }
   } else if (item.type === 'mentor') {
     sourceText = item.title.replace('ציטוט מאת ', '').replace('סרטון מומלץ: ', '');
     icon = <BrainCircuitIcon className="w-5 h-5" />;
@@ -96,6 +101,7 @@ const FeedCardV2: React.FC<FeedCardV2Props> = ({ item, index, onSelect, onLongPr
           }
       }}
       aria-label={`פתח פריט: ${item.title}`}
+      style={{ viewTransitionName: `feed-item-${item.id}` }}
     >
       {cardStyle === 'glass' && (
         <div 
